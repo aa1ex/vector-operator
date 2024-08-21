@@ -184,7 +184,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	}
 
 	// Get Config in Json ([]byte)
-	byteConfig, err := config.BuildByteConfig(vaCtrl, pipelines...)
+	byteConfig, err := config.BuildAgentConfig(vaCtrl, pipelines...)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -196,7 +196,9 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 				byteConfig,
 				vaCtrl.Client,
 				vaCtrl.ClientSet,
-				vaCtrl.Vector,
+				&vaCtrl.Vector.Spec.Agent.VectorCommon,
+				vaCtrl.Vector.Name,
+				vaCtrl.Vector.Namespace,
 				r.ConfigCheckTimeout,
 			)
 			configCheck.Initiator = configcheck.ConfigCheckInitiatorVector

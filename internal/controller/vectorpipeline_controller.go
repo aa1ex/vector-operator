@@ -26,7 +26,6 @@ import (
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
-	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -54,26 +53,24 @@ type PipelineReconciler struct {
 
 var VectorAgentReconciliationSourceChannel = make(chan event.GenericEvent)
 
-const PipelineDeleteEventTimeout time.Duration = 3 * time.Second
-
 func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("Pipeline", req.Name)
-
 	log.Info("start Reconcile Pipeline")
+
 	pipelineCR, err := r.findPipelineCustomResourceInstance(ctx, req)
 	if err != nil {
 		log.Error(err, "Failed to get Pipeline")
 		return ctrl.Result{}, err
 	}
-	vectorInstances, err := listVectorCustomResourceInstances(ctx, r.Client)
 
+	vectorInstances, err := listVectorCustomResourceInstances(ctx, r.Client)
 	if err != nil {
 		log.Error(err, "Failed to get Instances")
 		return ctrl.Result{}, nil
 	}
 
 	if len(vectorInstances) == 0 {
-		log.Info("Vertors not found")
+		log.Info("Vectors not found")
 		return ctrl.Result{}, nil
 	}
 
@@ -101,6 +98,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	// TODO(aa1ex): create controller for aggregator?
 	for _, vector := range vectorInstances {
 		if vector.DeletionTimestamp != nil {
 			continue
@@ -110,7 +108,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		vaCtrl := vectoragent.NewController(vector, r.Client, r.Clientset)
 		vaCtrl.SetDefault()
 		// Get Vector Config file
-		byteConfig, err := config.BuildByteConfig(vaCtrl, pipelineCR)
+		byteConfig, err := config.BuildAgentConfig(vaCtrl, pipelineCR)
 		if err != nil {
 			if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
 				return ctrl.Result{}, err
@@ -130,28 +128,22 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Context, req ctrl.Request) (pipeline pipeline.Pipeline, err error) {
+func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Context, req ctrl.Request) (pipeline.Pipeline, error) {
 	if req.Namespace != "" {
 		vp := &vectorv1alpha1.VectorPipeline{}
 		err := r.Get(ctx, req.NamespacedName, vp)
 		if err != nil {
-			if api_errors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, err
+			return nil, client.IgnoreNotFound(err)
 		}
 		return vp, nil
-	} else {
-		cvp := &vectorv1alpha1.ClusterVectorPipeline{}
-		err := r.Get(ctx, req.NamespacedName, cvp)
-		if err != nil {
-			if api_errors.IsNotFound(err) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		return cvp, nil
 	}
+
+	cvp := &vectorv1alpha1.ClusterVectorPipeline{}
+	if err := r.Get(ctx, req.NamespacedName, cvp); err != nil {
+		return nil, client.IgnoreNotFound(err)
+	}
+	return cvp, nil
+
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -170,11 +162,14 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 		vaCtrl.Config,
 		vaCtrl.Client,
 		vaCtrl.ClientSet,
-		vaCtrl.Vector,
+		&vaCtrl.Vector.Spec.Agent.VectorCommon,
+		vaCtrl.Vector.Name,
+		vaCtrl.Vector.Namespace,
 		r.ConfigCheckTimeout,
 	)
 	configCheck.Initiator = configcheck.ConfigCheckInitiatorPipieline
 	defer r.PipelineCheckWG.Done()
+
 	// Start ConfigCheck
 	reason, err := configCheck.Run(ctx)
 	if reason != "" {
@@ -188,9 +183,8 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 		}
 		return
 	}
-
 	if err != nil {
-		log.Error(err, "Configcheck error")
+		log.Error(err, "ConfigCheck error")
 		return
 	}
 
@@ -203,7 +197,7 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 		log.Error(err, "Failed to set pipeline status")
 		return
 	}
-	// Start vector reconcilation
+	// Start vector reconciliation
 	if *p.GetConfigCheckResult() {
 		VectorAgentReconciliationSourceChannel <- event.GenericEvent{Object: vaCtrl.Vector}
 	}

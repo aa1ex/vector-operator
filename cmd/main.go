@@ -19,17 +19,19 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/kaasops/vector-operator/internal/utils/k8s"
+	"os"
+	"sync"
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sync"
-	"time"
+
+	"github.com/kaasops/vector-operator/internal/utils/k8s"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -208,6 +210,18 @@ func main() {
 		ConfigCheckTimeout:         configCheckTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VectorPipeline")
+		os.Exit(1)
+	}
+	if err = (&controller.VectorAggregatorReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Clientset:            clientset,
+		PipelineCheckWG:      &pipelineCheckWG,
+		PipelineCheckTimeout: pipelineCheckTimeout,
+		ConfigCheckTimeout:   configCheckTimeout,
+		DiscoveryClient:      dc,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VectorAggregator")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

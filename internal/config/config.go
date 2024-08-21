@@ -19,17 +19,11 @@ package config
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
-	"github.com/kaasops/vector-operator/internal/pipeline"
-	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
 	"github.com/mitchellh/mapstructure"
-	"gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/labels"
-	goyaml "sigs.k8s.io/yaml"
 )
 
 var (
@@ -37,15 +31,15 @@ var (
 	ErrClusterScopeNotAllowed error = errors.New("logs from external namespace not allowed")
 )
 
-func New(vector *vectorv1alpha1.Vector) *VectorConfig {
+func newVectorConfig(apiEnabled, playgroundEnabled bool) *VectorConfig {
 	sources := make(map[string]*Source)
 	transforms := make(map[string]*Transform)
 	sinks := make(map[string]*Sink)
 
 	api := &ApiSpec{
 		Address:    "0.0.0.0:" + strconv.Itoa(vectoragent.ApiPort),
-		Enabled:    vector.Spec.Agent.Api.Enabled,
-		Playground: vector.Spec.Agent.Api.Playground,
+		Enabled:    apiEnabled,
+		Playground: playgroundEnabled,
 	}
 
 	return &VectorConfig{
@@ -57,86 +51,6 @@ func New(vector *vectorv1alpha1.Vector) *VectorConfig {
 			Sinks:      sinks,
 		},
 	}
-}
-
-func BuildByteConfig(vaCtrl *vectoragent.Controller, pipelines ...pipeline.Pipeline) ([]byte, error) {
-	config, err := BuildConfig(vaCtrl, pipelines...)
-	if err != nil {
-		return nil, err
-	}
-	yaml_byte, err := yaml.Marshal(config)
-	if err != nil {
-		return nil, err
-	}
-	json_byte, err := goyaml.YAMLToJSON(yaml_byte)
-	if err != nil {
-		return nil, err
-	}
-	return json_byte, nil
-}
-
-func BuildConfig(vaCtrl *vectoragent.Controller, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
-	config := New(vaCtrl.Vector)
-
-	for _, pipeline := range pipelines {
-		p := &PipelineConfig{}
-		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
-		}
-		for k, v := range p.Sources {
-			// Validate source
-			if _, ok := pipeline.(*vectorv1alpha1.VectorPipeline); ok {
-				if v.Type != KubernetesSourceType {
-					return nil, ErrNotAllowedSourceType
-				}
-				_, err := labels.Parse(v.ExtraLabelSelector)
-				if err != nil {
-					return nil, fmt.Errorf("invalid pod selector for source %s: %w", k, err)
-				}
-				_, err = labels.Parse(v.ExtraNamespaceLabelSelector)
-				if err != nil {
-					return nil, fmt.Errorf("invalid namespace selector for source %s: %w", k, err)
-				}
-				if v.ExtraNamespaceLabelSelector == "" {
-					v.ExtraNamespaceLabelSelector = k8s.NamespaceNameToLabel(pipeline.GetNamespace())
-				}
-				if v.ExtraNamespaceLabelSelector != k8s.NamespaceNameToLabel(pipeline.GetNamespace()) {
-					return nil, ErrClusterScopeNotAllowed
-				}
-			}
-			if v.Type == KubernetesSourceType && vaCtrl.Vector.Spec.UseApiServerCache {
-				v.UseApiServerCache = true
-			}
-			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			config.Sources[v.Name] = v
-		}
-		for k, v := range p.Transforms {
-			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			for i, inputName := range v.Inputs {
-				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
-			}
-			config.Transforms[v.Name] = v
-		}
-		for k, v := range p.Sinks {
-			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			for i, inputName := range v.Inputs {
-				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
-			}
-			config.Sinks[v.Name] = v
-		}
-	}
-
-	// Add exporter pipeline
-	if vaCtrl.Vector.Spec.Agent.InternalMetrics && !isExporterSinkExists(config.Sinks) {
-		config.Sources[DefaultInternalMetricsSourceName] = defaultInternalMetricsSource
-		config.Sinks[DefaultInternalMetricsSinkName] = defaultInternalMetricsSink
-	}
-
-	if len(config.Sources) == 0 && len(config.Sinks) == 0 {
-		config.PipelineConfig = defaultPipelineConfig
-	}
-
-	return config, nil
 }
 
 func UnmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) error {
