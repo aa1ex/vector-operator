@@ -223,8 +223,10 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pipeline, vaCtrl *agent.Controller) {
 	log := log.FromContext(ctx).WithValues("Pipeline", p.GetName())
-	// Init CheckConfig
-	configCheck := configcheck.New(
+	defer r.PipelineCheckWG.Done()
+
+	// Start ConfigCheck
+	reason, err := configcheck.New(
 		vaCtrl.Config,
 		vaCtrl.Client,
 		vaCtrl.ClientSet,
@@ -232,12 +234,8 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 		vaCtrl.Vector.Name,
 		vaCtrl.Vector.Namespace,
 		r.ConfigCheckTimeout,
-	)
-	configCheck.Initiator = configcheck.ConfigCheckInitiatorPipieline
-	defer r.PipelineCheckWG.Done()
-
-	// Start ConfigCheck
-	reason, err := configCheck.Run(ctx)
+		configcheck.ConfigCheckInitiatorPipieline,
+	).Run(ctx)
 	if reason != "" {
 		if err = pipeline.SetFailedStatus(ctx, r.Client, p, reason); err != nil {
 			log.Error(err, "Failed to set pipeline status")
@@ -272,8 +270,10 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 // TODO(aa1ex): copy paste
 func (r *PipelineReconciler) runPipelineCheckAggregator(ctx context.Context, p pipeline.Pipeline, vaCtrl *aggregator.Controller) {
 	log := log.FromContext(ctx).WithValues("Pipeline", p.GetName())
-	// Init CheckConfig
-	configCheck := configcheck.New(
+	defer r.PipelineCheckWG.Done()
+
+	// Start ConfigCheck
+	reason, err := configcheck.New(
 		vaCtrl.ConfigBytes,
 		vaCtrl.Client,
 		vaCtrl.ClientSet,
@@ -281,12 +281,8 @@ func (r *PipelineReconciler) runPipelineCheckAggregator(ctx context.Context, p p
 		vaCtrl.VectorAggregator.Name,
 		vaCtrl.VectorAggregator.Namespace,
 		r.ConfigCheckTimeout,
-	)
-	configCheck.Initiator = configcheck.ConfigCheckInitiatorPipieline
-	defer r.PipelineCheckWG.Done()
-
-	// Start ConfigCheck
-	reason, err := configCheck.Run(ctx)
+		configcheck.ConfigCheckInitiatorPipieline,
+	).Run(ctx)
 	if reason != "" {
 		if err = pipeline.SetFailedStatus(ctx, r.Client, p, reason); err != nil {
 			log.Error(err, "Failed to set pipeline status")

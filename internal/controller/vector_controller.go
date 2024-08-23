@@ -196,7 +196,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 
 	if !vaCtrl.Vector.Spec.Agent.ConfigCheck.Disabled {
 		if vaCtrl.Vector.Status.LastAppliedConfigHash == nil || *vaCtrl.Vector.Status.LastAppliedConfigHash != cfgHash {
-			configCheck := configcheck.New(
+			reason, err := configcheck.New(
 				byteConfig,
 				vaCtrl.Client,
 				vaCtrl.ClientSet,
@@ -204,9 +204,8 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 				vaCtrl.Vector.Name,
 				vaCtrl.Vector.Namespace,
 				r.ConfigCheckTimeout,
-			)
-			configCheck.Initiator = configcheck.ConfigCheckInitiatorVector
-			reason, err := configCheck.Run(ctx)
+				configcheck.ConfigCheckInitiatorVector,
+			).Run(ctx)
 			if err != nil {
 				if errors.Is(err, configcheck.ValidationError) {
 					if err := vaCtrl.SetFailedStatus(ctx, reason); err != nil {

@@ -69,6 +69,7 @@ func New(
 	va *vectorv1alpha1.VectorCommon,
 	name, namespace string,
 	timeout time.Duration,
+	initiator string,
 ) *ConfigCheck {
 	image := va.Image
 	if va.ConfigCheck.Image != nil {
@@ -106,6 +107,7 @@ func New(
 		ConfigReloaderResources:  va.ConfigReloaderResources,
 		ConfigCheckTimeout:       timeout,
 		Annotations:              va.ConfigCheck.Annotations,
+		Initiator:                initiator,
 	}
 }
 

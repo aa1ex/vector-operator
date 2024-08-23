@@ -18,13 +18,52 @@ package agent
 
 import (
 	"context"
-	"k8s.io/utils/ptr"
-
-	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	monitorv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
+	"github.com/kaasops/vector-operator/internal/utils/k8s"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type Controller struct {
+	client.Client
+	Vector *vectorv1alpha1.Vector
+
+	Config []byte
+	// Temp. Wait this issue - https://github.com/kubernetes-sigs/controller-runtime/issues/452
+	ClientSet *kubernetes.Clientset
+}
+
+func NewController(v *vectorv1alpha1.Vector, c client.Client, cs *kubernetes.Clientset) *Controller {
+	ctrl := &Controller{
+		Client:    c,
+		Vector:    v,
+		ClientSet: cs,
+	}
+	ctrl.setDefault()
+	return ctrl
+}
+
+func (ctrl *Controller) SetSuccessStatus(ctx context.Context, hash *uint32) error {
+	var status = true
+	ctrl.Vector.Status.ConfigCheckResult = &status
+	ctrl.Vector.Status.Reason = nil
+	ctrl.Vector.Status.LastAppliedConfigHash = hash
+
+	return k8s.UpdateStatus(ctx, ctrl.Vector, ctrl.Client)
+}
+
+func (ctrl *Controller) SetFailedStatus(ctx context.Context, reason string) error {
+	var status = false
+	ctrl.Vector.Status.ConfigCheckResult = &status
+	ctrl.Vector.Status.Reason = &reason
+
+	return k8s.UpdateStatus(ctx, ctrl.Vector, ctrl.Client)
+}
 
 func (ctrl *Controller) EnsureVectorAgent(ctx context.Context, configOnly bool) error {
 	log := log.FromContext(ctx).WithValues("vector-agent", ctrl.Vector.Name)

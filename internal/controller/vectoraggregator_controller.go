@@ -91,7 +91,7 @@ func (r *VectorAggregatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	return r.createOrUpdateVectorAggregator(ctx, r.Client, r.Clientset, vectorCR, false)
+	return r.createOrUpdateVectorAggregator(ctx, r.Client, r.Clientset, vectorCR)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -134,18 +134,18 @@ func (r *VectorAggregatorReconciler) findVectorAggregatorCustomResourceInstance(
 }
 
 func listVectorAggregatorCustomResourceInstances(ctx context.Context, client client.Client) (vectors []*observabilityv1alpha1.VectorAggregator, err error) {
-	vectorlist := observabilityv1alpha1.VectorAggregatorList{}
-	err = client.List(ctx, &vectorlist)
+	vectorList := observabilityv1alpha1.VectorAggregatorList{}
+	err = client.List(ctx, &vectorList)
 	if err != nil {
 		return nil, err
 	}
-	for _, v := range vectorlist.Items {
+	for _, v := range vectorList.Items {
 		vectors = append(vectors, &v)
 	}
 	return vectors, nil
 }
 
-func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, v *observabilityv1alpha1.VectorAggregator, configOnly bool) (ctrl.Result, error) {
+func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, v *observabilityv1alpha1.VectorAggregator) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("VectorAggregator", v.Name)
 	// Init Controller for Vector Agent
 	vaCtrl := aggregator.NewController(v, client, clientset)
@@ -174,7 +174,7 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 
 	if !vaCtrl.VectorAggregator.Spec.ConfigCheck.Disabled {
 		if vaCtrl.VectorAggregator.Status.LastAppliedConfigHash == nil || *vaCtrl.VectorAggregator.Status.LastAppliedConfigHash != cfgHash {
-			configCheck := configcheck.New(
+			reason, err := configcheck.New(
 				byteCfg,
 				vaCtrl.Client,
 				vaCtrl.ClientSet,
@@ -182,9 +182,8 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 				vaCtrl.VectorAggregator.Name,
 				vaCtrl.VectorAggregator.Namespace,
 				r.ConfigCheckTimeout,
-			)
-			configCheck.Initiator = configcheck.ConfigCheckInitiatorVector
-			reason, err := configCheck.Run(ctx)
+				configcheck.ConfigCheckInitiatorVector,
+			).Run(ctx)
 			if err != nil {
 				if errors.Is(err, configcheck.ValidationError) {
 					if err := vaCtrl.SetFailedStatus(ctx, reason); err != nil {
