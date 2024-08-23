@@ -95,7 +95,7 @@ func isExporterSinkExists(sinks map[string]*Sink) bool {
 	return false
 }
 
-func (c *PipelineConfig) MarshalJSON() ([]byte, error) {
+func (c *VectorConfig) MarshalJSON() ([]byte, error) {
 	yamlByte, err := yaml.Marshal(c)
 	if err != nil {
 		return nil, err
