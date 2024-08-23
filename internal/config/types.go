@@ -35,13 +35,13 @@ type ApiSpec struct {
 }
 
 type Source struct {
-	Name                        string                 `yaml:"-"`
-	Type                        string                 `mapstructure:"type" yaml:"type"`
-	ExtraNamespaceLabelSelector string                 `mapstructure:"extra_namespace_label_selector" yaml:"extra_namespace_label_selector,omitempty"`
-	ExtraLabelSelector          string                 `mapstructure:"extra_label_selector" yaml:"extra_label_selector,omitempty"`
-	ExtraFieldSelector          string                 `mapstructure:"extra_field_selector" yaml:"extra_field_selector,omitempty"`
-	UseApiServerCache           bool                   `mapstructure:"use_apiserver_cache" yaml:"use_apiserver_cache,omitempty"`
-	Options                     map[string]interface{} `mapstructure:",remain" yaml:",inline,omitempty"`
+	Name                        string         `yaml:"-"`
+	Type                        string         `mapstructure:"type" yaml:"type"`
+	ExtraNamespaceLabelSelector string         `mapstructure:"extra_namespace_label_selector" yaml:"extra_namespace_label_selector,omitempty"`
+	ExtraLabelSelector          string         `mapstructure:"extra_label_selector" yaml:"extra_label_selector,omitempty"`
+	ExtraFieldSelector          string         `mapstructure:"extra_field_selector" yaml:"extra_field_selector,omitempty"`
+	UseApiServerCache           bool           `mapstructure:"use_apiserver_cache" yaml:"use_apiserver_cache,omitempty"`
+	Options                     map[string]any `mapstructure:",remain" yaml:",inline,omitempty"`
 }
 
 type Transform struct {

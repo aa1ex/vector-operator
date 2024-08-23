@@ -3,6 +3,7 @@ package aggregator
 import (
 	"context"
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
+	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	monitorv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +19,8 @@ import (
 type Controller struct {
 	client.Client
 	VectorAggregator *vectorv1alpha1.VectorAggregator
-	Config           []byte
+	ConfigBytes      []byte
+	Config           *config.VectorConfig
 	ClientSet        *kubernetes.Clientset
 }
 
@@ -49,10 +51,8 @@ func (ctrl *Controller) EnsureVectorAggregator(ctx context.Context) error {
 		return err
 	}
 
-	if ctrl.VectorAggregator.Spec.Api.Enabled {
-		if err := ctrl.ensureVectorAggregatorService(ctx); err != nil {
-			return err
-		}
+	if err := ctrl.ensureVectorAggregatorService(ctx); err != nil {
+		return err
 	}
 
 	if ctrl.VectorAggregator.Spec.InternalMetrics && monitoringCRD {
@@ -222,7 +222,7 @@ func (ctrl *Controller) annotationsForVectorAggregator() map[string]string {
 
 func (ctrl *Controller) objectMetaVectorAggregator(labels map[string]string, annotations map[string]string, namespace string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:            ctrl.VectorAggregator.Name + "-aggregator",
+		Name:            ctrl.VectorAggregator.Name,
 		Namespace:       namespace,
 		Labels:          labels,
 		Annotations:     annotations,

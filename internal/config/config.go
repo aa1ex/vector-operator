@@ -19,27 +19,39 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"gopkg.in/yaml.v2"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"net"
+	goyaml "sigs.k8s.io/yaml"
 	"strconv"
 
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
-	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
+	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/mitchellh/mapstructure"
 )
 
 var (
-	ErrNotAllowedSourceType   error = errors.New("type kubernetes_logs only allowed")
-	ErrClusterScopeNotAllowed error = errors.New("logs from external namespace not allowed")
+	ErrNotAllowedSourceType   = errors.New("type kubernetes_logs only allowed")
+	ErrClusterScopeNotAllowed = errors.New("logs from external namespace not allowed")
 )
 
-func newVectorConfig(apiEnabled, playgroundEnabled bool) *VectorConfig {
+type VectorConfigParams struct {
+	ApiEnabled        bool
+	PlaygroundEnabled bool
+	UseApiServerCache bool
+	InternalMetrics   bool
+}
+
+func newVectorConfig(p VectorConfigParams) *VectorConfig {
 	sources := make(map[string]*Source)
 	transforms := make(map[string]*Transform)
 	sinks := make(map[string]*Sink)
 
 	api := &ApiSpec{
-		Address:    "0.0.0.0:" + strconv.Itoa(vectoragent.ApiPort),
-		Enabled:    apiEnabled,
-		Playground: playgroundEnabled,
+		Address:    net.JoinHostPort("0.0.0.0", strconv.Itoa(vectoragent.ApiPort)),
+		Enabled:    p.ApiEnabled,
+		Playground: p.PlaygroundEnabled,
 	}
 
 	return &VectorConfig{
@@ -53,7 +65,7 @@ func newVectorConfig(apiEnabled, playgroundEnabled bool) *VectorConfig {
 	}
 }
 
-func UnmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) error {
+func unmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) error {
 	b, err := json.Marshal(spec)
 	if err != nil {
 		return err
@@ -76,9 +88,52 @@ func UnmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) er
 
 func isExporterSinkExists(sinks map[string]*Sink) bool {
 	for _, sink := range sinks {
-		if sink.Type == InternalMetricsSinkType {
+		if sink.Type == PrometheusExporterType {
 			return true
 		}
 	}
 	return false
+}
+
+func (c *PipelineConfig) MarshalJSON() ([]byte, error) {
+	yamlByte, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	jsonByte, err := goyaml.YAMLToJSON(yamlByte)
+	if err != nil {
+		return nil, err
+	}
+	return jsonByte, nil
+}
+
+func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
+	var ports []corev1.ServicePort
+	for _, s := range c.Sources {
+		switch s.Type {
+		case "vector": // TODO: hardcode
+			if val, ok := s.Options["address"]; ok {
+				address, _ := val.(string)
+				if _, port, err := net.SplitHostPort(address); err == nil {
+					portN, _ := strconv.Atoi(port)
+					if isValidPort(portN) {
+						ports = append(ports, corev1.ServicePort{
+							Name:       s.Name + "-port",
+							Protocol:   corev1.ProtocolTCP,
+							Port:       int32(portN),
+							TargetPort: intstr.FromInt32(int32(portN)),
+						})
+					}
+				}
+			}
+		}
+	}
+	return ports
+}
+
+func isValidPort(portN int) bool {
+	if portN < 0 || portN > 65535 {
+		return false
+	}
+	return true
 }

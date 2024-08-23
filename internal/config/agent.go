@@ -5,40 +5,39 @@ import (
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
-	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/labels"
 	goyaml "sigs.k8s.io/yaml"
 )
 
-func BuildAgentConfig(vaCtrl *vectoragent.Controller, pipelines ...pipeline.Pipeline) ([]byte, error) {
-	config, err := buildAgentConfig(vaCtrl, pipelines...)
+func BuildAgentConfig(p VectorConfigParams, pipelines ...pipeline.Pipeline) ([]byte, error) {
+	cfg, err := buildAgentConfig(p, pipelines...)
 	if err != nil {
 		return nil, err
 	}
-	yaml_byte, err := yaml.Marshal(config)
+	yamlBytes, err := yaml.Marshal(cfg)
 	if err != nil {
 		return nil, err
 	}
-	json_byte, err := goyaml.YAMLToJSON(yaml_byte)
+	jsonBytes, err := goyaml.YAMLToJSON(yamlBytes)
 	if err != nil {
 		return nil, err
 	}
-	return json_byte, nil
+	return jsonBytes, nil
 }
 
-func buildAgentConfig(vaCtrl *vectoragent.Controller, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
-	config := newVectorConfig(vaCtrl.Vector.Spec.Agent.Api.Enabled, vaCtrl.Vector.Spec.Agent.Api.Playground)
+func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
+	cfg := newVectorConfig(params)
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
-		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
+		if err := unmarshalJson(pipeline.GetSpec(), p); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
 		for k, v := range p.Sources {
 			// Validate source
 			if _, ok := pipeline.(*vectorv1alpha1.VectorPipeline); ok {
-				if v.Type != KubernetesSourceType {
+				if v.Type != KubernetesLogsType {
 					return nil, ErrNotAllowedSourceType
 				}
 				_, err := labels.Parse(v.ExtraLabelSelector)
@@ -56,37 +55,37 @@ func buildAgentConfig(vaCtrl *vectoragent.Controller, pipelines ...pipeline.Pipe
 					return nil, ErrClusterScopeNotAllowed
 				}
 			}
-			if v.Type == KubernetesSourceType && vaCtrl.Vector.Spec.UseApiServerCache {
+			if v.Type == KubernetesLogsType && params.UseApiServerCache {
 				v.UseApiServerCache = true
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			config.Sources[v.Name] = v
+			cfg.Sources[v.Name] = v
 		}
 		for k, v := range p.Transforms {
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
-			config.Transforms[v.Name] = v
+			cfg.Transforms[v.Name] = v
 		}
 		for k, v := range p.Sinks {
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
-			config.Sinks[v.Name] = v
+			cfg.Sinks[v.Name] = v
 		}
 	}
 
 	// Add exporter pipeline
-	if vaCtrl.Vector.Spec.Agent.InternalMetrics && !isExporterSinkExists(config.Sinks) {
-		config.Sources[DefaultInternalMetricsSourceName] = defaultInternalMetricsSource
-		config.Sinks[DefaultInternalMetricsSinkName] = defaultInternalMetricsSink
+	if params.InternalMetrics && !isExporterSinkExists(cfg.Sinks) {
+		cfg.Sources[DefaultInternalMetricsSourceName] = defaultInternalMetricsSource
+		cfg.Sinks[DefaultInternalMetricsSinkName] = defaultInternalMetricsSink
 	}
 
-	if len(config.Sources) == 0 && len(config.Sinks) == 0 {
-		config.PipelineConfig = defaultPipelineConfig
+	if len(cfg.Sources) == 0 && len(cfg.Sinks) == 0 {
+		cfg.PipelineConfig = defaultAgentPipelineConfig
 	}
 
-	return config, nil
+	return cfg, nil
 }

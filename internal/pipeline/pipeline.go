@@ -34,9 +34,10 @@ type Pipeline interface {
 	IsValid() bool
 	IsDeleted() bool
 	UpdateStatus(context.Context, client.Client) error
+	VectorRole() vectorv1alpha1.VectorRole
 }
 
-func GetValidPipelines(ctx context.Context, client client.Client) ([]Pipeline, error) {
+func GetValidPipelines(ctx context.Context, client client.Client, filterRole vectorv1alpha1.VectorRole) ([]Pipeline, error) {
 	var validPipelines []Pipeline
 	vps, err := GetVectorPipelines(ctx, client)
 	if err != nil {
@@ -48,14 +49,14 @@ func GetValidPipelines(ctx context.Context, client client.Client) ([]Pipeline, e
 	}
 	if len(vps) != 0 {
 		for _, vp := range vps {
-			if !vp.IsDeleted() && vp.IsValid() {
+			if !vp.IsDeleted() && vp.IsValid() && vp.VectorRole() == filterRole {
 				validPipelines = append(validPipelines, vp.DeepCopy())
 			}
 		}
 	}
 	if len(cvps) != 0 {
 		for _, cvp := range cvps {
-			if !cvp.IsDeleted() && cvp.IsValid() {
+			if !cvp.IsDeleted() && cvp.IsValid() && cvp.VectorRole() == filterRole {
 				validPipelines = append(validPipelines, cvp.DeepCopy())
 			}
 		}

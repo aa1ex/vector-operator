@@ -32,6 +32,7 @@ import (
 	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sync"
@@ -44,6 +45,8 @@ import (
 
 	observabilityv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
 )
+
+var VectorAggregatorReconciliationSourceChannel = make(chan event.GenericEvent)
 
 // VectorAggregatorReconciler reconciles a VectorAggregator object
 type VectorAggregatorReconciler struct {
@@ -99,7 +102,7 @@ func (r *VectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&observabilityv1alpha1.VectorAggregator{}).
-		WatchesRawSource(source.Channel(VectorAgentReconciliationSourceChannel, &handler.EnqueueRequestForObject{})).
+		WatchesRawSource(source.Channel(VectorAggregatorReconciliationSourceChannel, &handler.EnqueueRequestForObject{})).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
@@ -130,28 +133,48 @@ func (r *VectorAggregatorReconciler) findVectorAggregatorCustomResourceInstance(
 	return vectorCR, nil
 }
 
+func listVectorAggregatorCustomResourceInstances(ctx context.Context, client client.Client) (vectors []*observabilityv1alpha1.VectorAggregator, err error) {
+	vectorlist := observabilityv1alpha1.VectorAggregatorList{}
+	err = client.List(ctx, &vectorlist)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range vectorlist.Items {
+		vectors = append(vectors, &v)
+	}
+	return vectors, nil
+}
+
 func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, v *observabilityv1alpha1.VectorAggregator, configOnly bool) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("VectorAggregator", v.Name)
 	// Init Controller for Vector Agent
 	vaCtrl := aggregator.NewController(v, client, clientset)
 
 	// Get Vector Config file
-	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client)
+	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, observabilityv1alpha1.VectorRoleAggregator)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Get Config in Json ([]byte)
-	byteConfig, err := config.BuildAggregatorConfig(vaCtrl, pipelines)
+	cfg, err := config.BuildAggregatorConfig(config.VectorConfigParams{
+		ApiEnabled:        vaCtrl.VectorAggregator.Spec.Api.Enabled,
+		PlaygroundEnabled: vaCtrl.VectorAggregator.Spec.Api.Playground,
+		InternalMetrics:   vaCtrl.VectorAggregator.Spec.InternalMetrics,
+	}, pipelines...)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	cfgHash := hash.Get(byteConfig)
+	byteCfg, err := cfg.MarshalJSON()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	cfgHash := hash.Get(byteCfg)
 
 	if !vaCtrl.VectorAggregator.Spec.ConfigCheck.Disabled {
 		if vaCtrl.VectorAggregator.Status.LastAppliedConfigHash == nil || *vaCtrl.VectorAggregator.Status.LastAppliedConfigHash != cfgHash {
 			configCheck := configcheck.New(
-				byteConfig,
+				byteCfg,
 				vaCtrl.Client,
 				vaCtrl.ClientSet,
 				&vaCtrl.VectorAggregator.Spec.VectorCommon,
@@ -174,7 +197,8 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 		}
 	}
 
-	vaCtrl.Config = byteConfig
+	vaCtrl.ConfigBytes = byteCfg
+	vaCtrl.Config = cfg
 
 	// Start Reconcile Vector Agent
 	if err := vaCtrl.EnsureVectorAggregator(ctx); err != nil {

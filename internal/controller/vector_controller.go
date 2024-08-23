@@ -27,7 +27,7 @@ import (
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
-	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
+	"github.com/kaasops/vector-operator/internal/vector/agent"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -178,13 +178,18 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	vaCtrl.SetDefault()
 
 	// Get Vector Config file
-	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client)
+	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, vectorv1alpha1.VectorRoleAgent)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Get Config in Json ([]byte)
-	byteConfig, err := config.BuildAgentConfig(vaCtrl, pipelines...)
+	byteConfig, err := config.BuildAgentConfig(config.VectorConfigParams{
+		ApiEnabled:        vaCtrl.Vector.Spec.Agent.Api.Enabled,
+		PlaygroundEnabled: vaCtrl.Vector.Spec.Agent.Api.Playground,
+		UseApiServerCache: vaCtrl.Vector.Spec.UseApiServerCache,
+		InternalMetrics:   vaCtrl.Vector.Spec.Agent.InternalMetrics,
+	}, pipelines...)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

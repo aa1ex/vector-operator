@@ -7,6 +7,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type VectorRole string
+
+const (
+	VectorRoleAgent      = "agent"
+	VectorRoleAggregator = "aggregator"
+)
+
 var (
 	LocalPipelineKind = "VectorPipeline"
 )
@@ -48,4 +55,13 @@ func (vp *VectorPipeline) SetLastAppliedPipeline(hash *uint32) {
 
 func (vp *VectorPipeline) UpdateStatus(ctx context.Context, c client.Client) error {
 	return k8s.UpdateStatus(ctx, vp, c)
+}
+
+func (vp *VectorPipeline) VectorRole() VectorRole {
+	role := VectorRoleAgent
+	annotations := vp.ObjectMeta.GetAnnotations()
+	if v, ok := annotations["observability.kaasops.io/vector-role"]; ok { // TODO(aa1ex): add validation
+		role = v
+	}
+	return VectorRole(role)
 }

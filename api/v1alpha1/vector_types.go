@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,8 +25,6 @@ import (
 
 // VectorSpec defines the desired state of Vector
 type VectorSpec struct {
-	// DisableAggregation
-	// DisableAggregation bool `json:"disableAggregation,omitempty"`
 	// Vector Agent
 	Agent *VectorAgent `json:"agent,omitempty"`
 	// Determines if requests to the kube-apiserver can be served by a cache.
@@ -42,39 +39,6 @@ type VectorStatus struct {
 // VectorAgent is the Schema for the Vector Agent
 type VectorAgent struct {
 	VectorCommon `json:",inline"`
-}
-
-// ApiSpec is the Schema for the Vector Agent GraphQL API - https://vector.dev/docs/reference/api/
-type ApiSpec struct {
-	Enabled    bool `json:"enabled,omitempty"`
-	Playground bool `json:"playground,omitempty"`
-	// Enable ReadinessProbe and LivenessProbe via api /health endpoint.
-	// If probe enabled via VectorAgent, this setting will be ignored for that probe.
-	// +optional
-	Healthcheck bool `json:"healthcheck,omitempty"`
-}
-
-// ConfigCheck is the Schema for control params for ConfigCheck pods
-type ConfigCheck struct {
-	Disabled bool `json:"disabled,omitempty"`
-	// Image - docker image settings for Vector Agent
-	// if no specified operator uses default config version
-	// +optional
-	Image *string `json:"image,omitempty"`
-	// Resources container resource request and limits, https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-	// if not specified - default setting will be used
-	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Resources",xDescriptors="urn:alm:descriptor:com.tectonic.ui:resourceRequirements"
-	// +optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-	// Affinity If specified, the pod's scheduling constraints.
-	// +optional
-	Affinity *v1.Affinity `json:"affinity,omitempty"`
-	// Tolerations If specified, the pod's tolerations.
-	// +optional
-	Tolerations *[]v1.Toleration `json:"tolerations,omitempty"`
-	// Annotations is an unstructured key value map stored with a resource that may be set by external tools to store and retrieve arbitrary metadata.
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 //+kubebuilder:object:root=true

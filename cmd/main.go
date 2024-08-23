@@ -274,6 +274,13 @@ func setupCustomCache(mgrOptions *ctrl.Options, namespace string, watchLabel str
 					},
 				},
 			},
+			&appsv1.Deployment{}: {
+				Namespaces: map[string]cache.Config{
+					namespace: {
+						LabelSelector: labelSelector,
+					},
+				},
+			},
 			&corev1.Service{}: {
 				Namespaces: map[string]cache.Config{
 					namespace: {

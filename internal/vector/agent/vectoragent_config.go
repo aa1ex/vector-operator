@@ -34,7 +34,7 @@ func (ctrl *Controller) createVectorAgentConfig(ctx context.Context) (*corev1.Se
 		data = compression.Compress(ctrl.Config, log)
 	}
 	config := map[string][]byte{
-		"agent.json": data,
+		"config.json": data,
 	}
 	secret := &corev1.Secret{
 		ObjectMeta: ctrl.objectMetaVectorAgent(labels, annotations, ctrl.Vector.Namespace),

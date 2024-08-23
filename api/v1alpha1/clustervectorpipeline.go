@@ -49,3 +49,12 @@ func (vp *ClusterVectorPipeline) SetLastAppliedPipeline(hash *uint32) {
 func (vp *ClusterVectorPipeline) UpdateStatus(ctx context.Context, c client.Client) error {
 	return k8s.UpdateStatus(ctx, vp, c)
 }
+
+func (vp *ClusterVectorPipeline) VectorRole() VectorRole {
+	role := VectorRoleAgent
+	annotations := vp.ObjectMeta.GetAnnotations()
+	if v, ok := annotations["observability.kaasops.io/vector-role"]; ok { // TODO(aa1ex): add validation
+		role = v
+	}
+	return VectorRole(role)
+}

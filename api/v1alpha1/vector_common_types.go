@@ -94,3 +94,36 @@ type VectorCommon struct {
 	ConfigReloaderImage     string                  `json:"configReloaderImage,omitempty"`
 	ConfigReloaderResources v1.ResourceRequirements `json:"configReloaderResources,omitempty"`
 }
+
+// ApiSpec is the Schema for the Vector Agent GraphQL API - https://vector.dev/docs/reference/api/
+type ApiSpec struct {
+	Enabled    bool `json:"enabled,omitempty"`
+	Playground bool `json:"playground,omitempty"`
+	// Enable ReadinessProbe and LivenessProbe via api /health endpoint.
+	// If probe enabled via VectorAgent or VectorAggregator, this setting will be ignored for that probe.
+	// +optional
+	Healthcheck bool `json:"healthcheck,omitempty"`
+}
+
+// ConfigCheck is the Schema for control params for ConfigCheck pods
+type ConfigCheck struct {
+	Disabled bool `json:"disabled,omitempty"`
+	// Image - docker image settings for Vector Agent
+	// if no specified operator uses default config version
+	// +optional
+	Image *string `json:"image,omitempty"`
+	// Resources container resource request and limits, https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+	// if not specified - default setting will be used
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Resources",xDescriptors="urn:alm:descriptor:com.tectonic.ui:resourceRequirements"
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+	// Affinity If specified, the pod's scheduling constraints.
+	// +optional
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	// Tolerations If specified, the pod's tolerations.
+	// +optional
+	Tolerations *[]v1.Toleration `json:"tolerations,omitempty"`
+	// Annotations is an unstructured key value map stored with a resource that may be set by external tools to store and retrieve arbitrary metadata.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}

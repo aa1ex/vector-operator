@@ -36,7 +36,7 @@ type VectorPipelineSpec struct {
 
 // VectorPipelineStatus defines the observed state of VectorPipeline
 type VectorPipelineStatus struct {
-	ConfigCheckResult       *bool   `json:"configCheckResult,omitempty"`
+	ConfigCheckResult       *bool   `json:"configCheckResult"`
 	Reason                  *string `json:"reason,omitempty"`
 	LastAppliedPipelineHash *uint32 `json:"LastAppliedPipelineHash,omitempty"`
 }

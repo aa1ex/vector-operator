@@ -156,7 +156,7 @@ func (ctrl *Controller) annotationsForVectorAgent() map[string]string {
 
 func (ctrl *Controller) objectMetaVectorAgent(labels map[string]string, annotations map[string]string, namespace string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:            ctrl.Vector.Name + "-agent",
+		Name:            ctrl.Vector.Name,
 		Namespace:       namespace,
 		Labels:          labels,
 		Annotations:     annotations,

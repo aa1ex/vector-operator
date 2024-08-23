@@ -22,13 +22,13 @@ func (ctrl *Controller) createVectorAggregatorConfig(ctx context.Context) (*core
 	log := log.FromContext(ctx).WithValues("vector-aggregator-config", ctrl.VectorAggregator.Name)
 	labels := ctrl.labelsForVectorAggregator()
 	annotations := ctrl.annotationsForVectorAggregator()
-	data := ctrl.Config
+	data := ctrl.ConfigBytes
 
 	if ctrl.VectorAggregator.Spec.CompressConfigFile {
-		data = compression.Compress(ctrl.Config, log)
+		data = compression.Compress(ctrl.ConfigBytes, log)
 	}
 	config := map[string][]byte{
-		"aggregator.json": data,
+		"config.json": data,
 	}
 	secret := &corev1.Secret{
 		ObjectMeta: ctrl.objectMetaVectorAggregator(labels, annotations, ctrl.VectorAggregator.Namespace),

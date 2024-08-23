@@ -69,6 +69,8 @@ spec:
                 type: boolean
               reason:
                 type: string
+            required:
+            - configCheckResult
             type: object
         type: object
     served: true

@@ -14,7 +14,14 @@ spec:
     singular: vectoraggregator
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.configCheckResult
+      name: Valid
+      type: boolean
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: VectorAggregator is the Schema for the vectoraggregators API
@@ -976,7 +983,7 @@ spec:
                   healthcheck:
                     description: |-
                       Enable ReadinessProbe and LivenessProbe via api /health endpoint.
-                      If probe enabled via VectorAgent, this setting will be ignored for that probe.
+                      If probe enabled via VectorAgent or VectorAggregator, this setting will be ignored for that probe.
                     type: boolean
                   playground:
                     type: boolean

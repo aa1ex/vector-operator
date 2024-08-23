@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const ApiPort = 8687
+const ApiPort = 8686
 
 func (ctrl *Controller) ensureVectorAggregatorRBAC(ctx context.Context) error {
 	log := log.FromContext(ctx).WithValues("vector-aggregator-rbac", ctrl.VectorAggregator.Name)

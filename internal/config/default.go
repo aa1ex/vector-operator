@@ -2,10 +2,11 @@ package config
 
 const (
 	// types
-	KubernetesSourceType      = "kubernetes_logs"
+	KubernetesLogsType        = "kubernetes_logs"
 	BlackholeSinkType         = "blackhole"
 	InternalMetricsSourceType = "internal_metrics"
-	InternalMetricsSinkType   = "prometheus_exporter"
+	PrometheusExporterType    = "prometheus_exporter"
+	VectorType                = "vector"
 
 	// default names
 	DefaultSourceName                = "defaultSource"
@@ -15,9 +16,16 @@ const (
 )
 
 var (
-	defaultSource = &Source{
+	defaultAgentSource = &Source{
 		Name: DefaultSourceName,
-		Type: KubernetesSourceType,
+		Type: KubernetesLogsType,
+	}
+	defaultAggregatorSource = &Source{
+		Name: DefaultSourceName,
+		Type: VectorType,
+		Options: map[string]any{
+			"address": "0.0.0.0:8989",
+		},
 	}
 	defaultSink = &Sink{
 		Name:   DefaultSinkName,
@@ -28,9 +36,17 @@ var (
 			"print_interval_secs": 60,
 		},
 	}
-	defaultPipelineConfig = PipelineConfig{
+	defaultAgentPipelineConfig = PipelineConfig{
 		Sources: map[string]*Source{
-			DefaultSourceName: defaultSource,
+			DefaultSourceName: defaultAgentSource,
+		},
+		Sinks: map[string]*Sink{
+			DefaultSinkName: defaultSink,
+		},
+	}
+	defaultAggregatorPipelineConfig = PipelineConfig{
+		Sources: map[string]*Source{
+			DefaultSourceName: defaultAggregatorSource,
 		},
 		Sinks: map[string]*Sink{
 			DefaultSinkName: defaultSink,
@@ -43,7 +59,7 @@ var (
 	}
 	defaultInternalMetricsSink = &Sink{
 		Name:   DefaultInternalMetricsSinkName,
-		Type:   InternalMetricsSinkType,
+		Type:   PrometheusExporterType,
 		Inputs: []string{DefaultInternalMetricsSourceName},
 	}
 )

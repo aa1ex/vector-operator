@@ -11,24 +11,35 @@ import (
 func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error {
 	log := log.FromContext(ctx).WithValues("vector-aggregator-service", ctrl.VectorAggregator.Name)
 	log.Info("start Reconcile Vector Aggregator Service")
-	return k8s.CreateOrUpdateResource(ctx, ctrl.createVectorAggregatorService(), ctrl.Client)
+	svc := ctrl.createVectorAggregatorService()
+	if svc == nil {
+		return nil
+	}
+	return k8s.CreateOrUpdateResource(ctx, svc, ctrl.Client)
 }
 
 func (ctrl *Controller) createVectorAggregatorService() *corev1.Service {
 	labels := ctrl.labelsForVectorAggregator()
 	annotations := ctrl.annotationsForVectorAggregator()
+	ports := ctrl.Config.GetSourcesPorts()
+
+	if ctrl.VectorAggregator.Spec.Api.Enabled {
+		ports = append(ports, corev1.ServicePort{
+			Name:       "api",
+			Protocol:   "TCP",
+			Port:       ApiPort,
+			TargetPort: intstr.FromInt32(ApiPort),
+		})
+	}
+
+	if len(ports) == 0 {
+		return nil
+	}
 
 	return &corev1.Service{
 		ObjectMeta: ctrl.objectMetaVectorAggregator(labels, annotations, ctrl.VectorAggregator.Namespace),
 		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "api",
-					Protocol:   "TCP",
-					Port:       ApiPort,
-					TargetPort: intstr.FromInt32(ApiPort),
-				},
-			},
+			Ports:    ports,
 			Selector: labels,
 		},
 	}

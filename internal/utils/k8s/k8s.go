@@ -325,10 +325,7 @@ func NamespaceNameToLabel(namespace string) string {
 func ResourceExists(dc discovery.DiscoveryInterface, apiGroupVersion, kind string) (bool, error) {
 	apiList, err := dc.ServerResourcesForGroupVersion(apiGroupVersion)
 	if err != nil {
-		if api_errors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
+		return false, client.IgnoreNotFound(err)
 	}
 
 	for _, r := range apiList.APIResources {
