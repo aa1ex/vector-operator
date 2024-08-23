@@ -165,6 +165,7 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	byteCfg, err := cfg.MarshalJSON()
 	if err != nil {
 		return ctrl.Result{}, err
@@ -205,15 +206,7 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 		return ctrl.Result{}, err
 	}
 
-	if err := vaCtrl.SetLastAppliedPipelineStatus(ctx, &cfgHash); err != nil {
-		//TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
-		if api_errors.IsConflict(err) {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-
-	if err := vaCtrl.SetSuccessStatus(ctx); err != nil {
+	if err := vaCtrl.SetSuccessStatus(ctx, &cfgHash); err != nil {
 		// TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
 		if api_errors.IsConflict(err) {
 			return ctrl.Result{}, err

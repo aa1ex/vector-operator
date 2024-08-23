@@ -188,10 +188,11 @@ func (ctrl *Controller) setDefault() { // TODO(aa1ex): webhook defaulter instead
 	}
 }
 
-func (ctrl *Controller) SetSuccessStatus(ctx context.Context) error {
+func (ctrl *Controller) SetSuccessStatus(ctx context.Context, hash *uint32) error {
 	var status = true
 	ctrl.VectorAggregator.Status.ConfigCheckResult = &status
 	ctrl.VectorAggregator.Status.Reason = nil
+	ctrl.VectorAggregator.Status.LastAppliedConfigHash = hash
 	return k8s.UpdateStatus(ctx, ctrl.VectorAggregator, ctrl.Client)
 }
 
@@ -199,11 +200,6 @@ func (ctrl *Controller) SetFailedStatus(ctx context.Context, reason string) erro
 	var status = false
 	ctrl.VectorAggregator.Status.ConfigCheckResult = &status
 	ctrl.VectorAggregator.Status.Reason = &reason
-	return k8s.UpdateStatus(ctx, ctrl.VectorAggregator, ctrl.Client)
-}
-
-func (ctrl *Controller) SetLastAppliedPipelineStatus(ctx context.Context, hash *uint32) error {
-	ctrl.VectorAggregator.Status.LastAppliedConfigHash = hash
 	return k8s.UpdateStatus(ctx, ctrl.VectorAggregator, ctrl.Client)
 }
 
