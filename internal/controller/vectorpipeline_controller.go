@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/kaasops/vector-operator/internal/vector/aggregator"
 	"sync"
 	"time"
@@ -26,7 +27,6 @@ import (
 	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
 	"github.com/kaasops/vector-operator/internal/pipeline"
-	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -121,8 +121,8 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			}
 
 			// Init Controller for Vector Agent
-			vaCtrl := vectoragent.NewController(vector, r.Client, r.Clientset)
-			vaCtrl.SetDefault()
+			vaCtrl := agent.NewController(vector, r.Client, r.Clientset)
+
 			// Get Vector Config file
 			byteConfig, err := config.BuildAgentConfig(config.VectorConfigParams{
 				ApiEnabled:        vaCtrl.Vector.Spec.Agent.Api.Enabled,
@@ -221,7 +221,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pipeline, vaCtrl *vectoragent.Controller) {
+func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pipeline, vaCtrl *agent.Controller) {
 	log := log.FromContext(ctx).WithValues("Pipeline", p.GetName())
 	// Init CheckConfig
 	configCheck := configcheck.New(

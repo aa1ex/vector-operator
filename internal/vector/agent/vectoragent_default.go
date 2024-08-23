@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vectoragent
+package agent
 
 import (
 	"github.com/kaasops/vector-operator/api/v1alpha1"
@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func (ctrl *Controller) SetDefault() {
+func (ctrl *Controller) setDefault() {
 	if ctrl.Vector.Spec.Agent == nil {
 		ctrl.Vector.Spec.Agent = new(v1alpha1.VectorAgent)
 	}

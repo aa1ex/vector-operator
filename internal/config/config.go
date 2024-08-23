@@ -49,7 +49,7 @@ func newVectorConfig(p VectorConfigParams) *VectorConfig {
 	sinks := make(map[string]*Sink)
 
 	api := &ApiSpec{
-		Address:    net.JoinHostPort("0.0.0.0", strconv.Itoa(vectoragent.ApiPort)),
+		Address:    net.JoinHostPort("0.0.0.0", strconv.Itoa(agent.ApiPort)),
 		Enabled:    p.ApiEnabled,
 		Playground: p.PlaygroundEnabled,
 	}

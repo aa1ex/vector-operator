@@ -173,9 +173,7 @@ func (r *VectorReconciler) reconcileVectors(ctx context.Context, client client.C
 func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, v *vectorv1alpha1.Vector, configOnly bool) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("Vector", v.Name)
 	// Init Controller for Vector Agent
-	vaCtrl := vectoragent.NewController(v, client, clientset)
-
-	vaCtrl.SetDefault()
+	vaCtrl := agent.NewController(v, client, clientset)
 
 	// Get Vector Config file
 	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, vectorv1alpha1.VectorRoleAgent)
@@ -193,6 +191,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	cfgHash := hash.Get(byteConfig)
 
 	if !vaCtrl.Vector.Spec.Agent.ConfigCheck.Disabled {
@@ -228,15 +227,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 		return ctrl.Result{}, err
 	}
 
-	if err := vaCtrl.SetLastAppliedPipelineStatus(ctx, &cfgHash); err != nil {
-		//TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
-		if api_errors.IsConflict(err) {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, err
-	}
-
-	if err := vaCtrl.SetSuccessStatus(ctx); err != nil {
+	if err := vaCtrl.SetSuccessStatus(ctx, &cfgHash); err != nil {
 		// TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
 		if api_errors.IsConflict(err) {
 			return ctrl.Result{}, err
