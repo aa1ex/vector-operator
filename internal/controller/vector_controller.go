@@ -36,7 +36,6 @@ import (
 
 	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -60,7 +59,6 @@ type VectorReconciler struct {
 	PipelineCheckWG      *sync.WaitGroup
 	PipelineCheckTimeout time.Duration
 	ConfigCheckTimeout   time.Duration
-	DiscoveryClient      *discovery.DiscoveryClient
 }
 
 //+kubebuilder:rbac:groups=observability.kaasops.io,resources=vectors,verbs=get;list;watch;create;update;patch;delete
@@ -105,7 +103,7 @@ func (r *VectorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *VectorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	monitoringCRD, err := k8s.ResourceExists(r.DiscoveryClient, monitorv1.SchemeGroupVersion.String(), monitorv1.PodMonitorsKind)
+	monitoringCRD, err := k8s.ResourceExists(r.Clientset.DiscoveryClient, monitorv1.SchemeGroupVersion.String(), monitorv1.PodMonitorsKind)
 	if err != nil {
 		return err
 	}

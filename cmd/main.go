@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -152,12 +151,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	dc, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		setupLog.Error(err, "unable to create discovery client")
-		os.Exit(1)
-	}
-
 	mgrOptions := ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -196,7 +189,6 @@ func main() {
 		PipelineCheckWG:      &pipelineCheckWG,
 		PipelineCheckTimeout: pipelineCheckTimeout,
 		ConfigCheckTimeout:   configCheckTimeout,
-		DiscoveryClient:      dc,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Vector")
 		os.Exit(1)
@@ -219,7 +211,6 @@ func main() {
 		PipelineCheckWG:      &pipelineCheckWG,
 		PipelineCheckTimeout: pipelineCheckTimeout,
 		ConfigCheckTimeout:   configCheckTimeout,
-		DiscoveryClient:      dc,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VectorAggregator")
 		os.Exit(1)
