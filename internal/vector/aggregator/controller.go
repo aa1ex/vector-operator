@@ -218,7 +218,7 @@ func (ctrl *Controller) annotationsForVectorAggregator() map[string]string {
 
 func (ctrl *Controller) objectMetaVectorAggregator(labels map[string]string, annotations map[string]string, namespace string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:            ctrl.VectorAggregator.Name,
+		Name:            ctrl.getNameVectorAggregator(),
 		Namespace:       namespace,
 		Labels:          labels,
 		Annotations:     annotations,
