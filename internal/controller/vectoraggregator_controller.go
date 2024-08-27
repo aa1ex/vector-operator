@@ -78,6 +78,14 @@ func (r *VectorAggregatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("Timeout waiting pipeline checks, continue reconcile vector")
 	}
 	log.Info("Start Reconcile VectorAggregator")
+	if req.Namespace == "" {
+		vectorAggregators, err := listVectorAggregatorCustomResourceInstances(ctx, r.Client)
+		if err != nil {
+			log.Error(err, "Failed to list vector aggregators instances")
+			return ctrl.Result{}, err
+		}
+		return r.reconcileVectorAggregators(ctx, r.Client, r.Clientset, vectorAggregators...)
+	}
 
 	vectorCR, err := r.findVectorAggregatorCustomResourceInstance(ctx, req)
 	if err != nil {
@@ -211,5 +219,21 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 		return ctrl.Result{}, err
 	}
 
+	return ctrl.Result{}, nil
+}
+
+func (r *VectorAggregatorReconciler) reconcileVectorAggregators(ctx context.Context, c client.Client, clientset *kubernetes.Clientset, aggregators ...*observabilityv1alpha1.VectorAggregator) (ctrl.Result, error) {
+	if len(aggregators) == 0 {
+		return ctrl.Result{}, nil
+	}
+
+	for _, ag := range aggregators {
+		if ag.DeletionTimestamp != nil {
+			continue
+		}
+		if _, err := r.createOrUpdateVectorAggregator(ctx, c, clientset, ag); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
