@@ -89,9 +89,9 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&watchNamespace, "watch-namespace", "", "Namespace to filter the list of watched objects")
 	flag.StringVar(&watchLabel, "watch-name", "", "Filter the list of watched objects by checking the app.kubernetes.io/managed-by label")
-	flag.DurationVar(&pipelineCheckTimeout, "pipeline-check-timeout", 15*time.Second, "wait pipeline checks before force vector reconcile. Default: 15s")
-	flag.DurationVar(&pipelineDeleteEventTimeout, "pipeline-delete-timeout", 5*time.Second, "collect delete events timeout")
-	flag.DurationVar(&configCheckTimeout, "configcheck-timeout", 300*time.Second, "configcheck timeout")
+	flag.DurationVar(&pipelineCheckTimeout, "pipeline-check-timeout", 15*time.Second, "Wait pipeline checks before force vector reconcile. Default: 15s")
+	flag.DurationVar(&pipelineDeleteEventTimeout, "pipeline-delete-timeout", 5*time.Second, "Collect delete events timeout")
+	flag.DurationVar(&configCheckTimeout, "configcheck-timeout", 300*time.Second, "Config check timeout")
 	opts := zap.Options{
 		Development: true,
 	}
