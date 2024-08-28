@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - sercrets
+  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -22,6 +22,7 @@ rules:
   - apps
   resources:
   - daemonsets
+  - deployments
   verbs:
   - create
   - delete
