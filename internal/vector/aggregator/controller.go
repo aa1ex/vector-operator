@@ -243,3 +243,7 @@ func (ctrl *Controller) getControllerReference() []metav1.OwnerReference {
 		},
 	}
 }
+
+func (ctrl *Controller) GetServiceName() string {
+	return ctrl.getNameVectorAggregator()
+}

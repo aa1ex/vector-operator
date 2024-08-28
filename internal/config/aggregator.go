@@ -3,24 +3,41 @@ package config
 import (
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/pipeline"
+	"net"
 )
 
-func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
+func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, []string, error) {
 	cfg := newVectorConfig(params)
 
 	cfg.Sources = make(map[string]*Source)
 	cfg.Transforms = make(map[string]*Transform)
 	cfg.Sinks = make(map[string]*Sink)
 
+	kubernetesEventsPorts := make([]string, 0)
+
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
 		if err := unmarshalJson(pipeline.GetSpec(), p); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
+			return nil, nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
 		for k, v := range p.Sources {
 			// TODO(aa1ex): validate source types
+			settings := v
+			if v.Type == kuberneteEventsType {
+				address := v.Options["address"].(string)
+				settings = &Source{
+					Name: k,
+					Type: SocketType,
+					Options: map[string]any{
+						"mode":    "tcp", // TODO(aa1ex): hardcode
+						"address": address,
+					},
+				}
+				_, port, _ := net.SplitHostPort(address) // TODO(aa1ex): handle error
+				kubernetesEventsPorts = append(kubernetesEventsPorts, port)
+			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			cfg.Sources[v.Name] = v
+			cfg.Sources[v.Name] = settings
 		}
 		for k, v := range p.Transforms {
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
@@ -47,5 +64,5 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 		cfg.PipelineConfig = defaultAggregatorPipelineConfig
 	}
 
-	return cfg, nil
+	return cfg, kubernetesEventsPorts, nil
 }

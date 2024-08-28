@@ -155,7 +155,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			vaCtrl := aggregator.NewController(vector, r.Client, r.Clientset)
 
 			// Get Vector Config file
-			cfg, err := config.BuildAggregatorConfig(config.VectorConfigParams{
+			cfg, _, err := config.BuildAggregatorConfig(config.VectorConfigParams{
 				ApiEnabled:        vaCtrl.VectorAggregator.Spec.Api.Enabled,
 				PlaygroundEnabled: vaCtrl.VectorAggregator.Spec.Api.Playground,
 				InternalMetrics:   vaCtrl.VectorAggregator.Spec.InternalMetrics,

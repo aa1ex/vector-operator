@@ -3,10 +3,12 @@ package config
 const (
 	// types
 	KubernetesLogsType        = "kubernetes_logs"
+	kuberneteEventsType       = "kubernetes_events"
 	BlackholeSinkType         = "blackhole"
 	InternalMetricsSourceType = "internal_metrics"
 	PrometheusExporterType    = "prometheus_exporter"
 	VectorType                = "vector"
+	SocketType                = "socket"
 
 	// default names
 	DefaultSourceName                = "defaultSource"

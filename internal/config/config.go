@@ -126,6 +126,21 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 					}
 				}
 			}
+		case "socket": // TODO: hardcode
+			if val, ok := s.Options["address"]; ok {
+				address, _ := val.(string)
+				if _, port, err := net.SplitHostPort(address); err == nil {
+					portN, _ := strconv.Atoi(port)
+					if isValidPort(portN) {
+						ports = append(ports, corev1.ServicePort{
+							Name:       s.Name + "-port",
+							Protocol:   corev1.ProtocolTCP,
+							Port:       int32(portN),
+							TargetPort: intstr.FromInt32(int32(portN)),
+						})
+					}
+				}
+			}
 		}
 	}
 	return ports

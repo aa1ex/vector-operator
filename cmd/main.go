@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"github.com/kaasops/vector-operator/internal/k8sevents"
 	"os"
 	"sync"
 	"time"
@@ -182,6 +183,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	eventsMgr := k8sevents.NewEventsManager(clientset)
+
 	if err = (&controller.VectorReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
@@ -211,6 +214,7 @@ func main() {
 		PipelineCheckWG:      &pipelineCheckWG,
 		PipelineCheckTimeout: pipelineCheckTimeout,
 		ConfigCheckTimeout:   configCheckTimeout,
+		EventsManager:        eventsMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VectorAggregator")
 		os.Exit(1)

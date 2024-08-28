@@ -23,11 +23,10 @@ func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error
 func (ctrl *Controller) createVectorAggregatorService() *corev1.Service {
 	labels := ctrl.labelsForVectorAggregator()
 	annotations := ctrl.annotationsForVectorAggregator()
-	//ports := ctrl.Config.GetSourcesPorts() // TODO(aa1ex):
-	var ports []corev1.ServicePort
-	if len(ctrl.VectorAggregator.Spec.Ports) > 0 {
-		ports = append(ports, parsePorts(ctrl.VectorAggregator.Spec.Ports)...)
-	}
+	ports := ctrl.Config.GetSourcesPorts() // TODO(aa1ex):
+	//if len(ctrl.VectorAggregator.Spec.Ports) > 0 {
+	//	ports = append(ports, parsePorts(ctrl.VectorAggregator.Spec.Ports)...)
+	//}
 
 	if ctrl.VectorAggregator.Spec.Api.Enabled {
 		ports = append(ports, corev1.ServicePort{
