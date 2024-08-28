@@ -19,6 +19,7 @@ package configcheck
 import (
 	"context"
 	"errors"
+	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"math/rand"
 	"time"
 
@@ -115,7 +116,7 @@ func (cc *ConfigCheck) Run(ctx context.Context) (string, error) {
 	log := log.FromContext(ctx).WithValues("Vector ConfigCheck", cc.Initiator)
 	log.Info("================= Started ConfigCheck =================")
 
-	if err := cc.ensureVectorConfigCheckRBAC(ctx); err != nil {
+	if err := cc.ensureVectorConfigCheckRBAC(ctx); err != nil && !api_errors.IsAlreadyExists(err) { // TODO(aa1ex): error is silenced, is that ok?
 		return "", err
 	}
 

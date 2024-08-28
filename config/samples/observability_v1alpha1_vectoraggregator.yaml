@@ -6,4 +6,18 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: vectoraggregator-sample
 spec:
-  # TODO(user): Add fields here
+  image: "timberio/vector:0.28.1-debian"
+  internalMetrics: false
+  replicas: 1
+  api:
+    enabled: true
+    healthcheck: true
+  configCheck:
+    disabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 800Mi
+    requests:
+      cpu: 10m
+      memory: 20Mi
