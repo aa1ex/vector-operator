@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"context"
+	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -23,10 +24,34 @@ func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error
 func (ctrl *Controller) createVectorAggregatorService() *corev1.Service {
 	labels := ctrl.labelsForVectorAggregator()
 	annotations := ctrl.annotationsForVectorAggregator()
-	ports := ctrl.Config.GetSourcesPorts() // TODO(aa1ex):
-	//if len(ctrl.VectorAggregator.Spec.Ports) > 0 {
-	//	ports = append(ports, parsePorts(ctrl.VectorAggregator.Spec.Ports)...)
-	//}
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	annotations["observability.kaasops.io/k8s-events-handler"] = strings.Join(ctrl.Config.GetKubernetesEventsPorts(), ",")
+
+	m := make(map[string]corev1.ServicePort)
+
+	keyFromServicePort := func(servicePort corev1.ServicePort) string {
+		return fmt.Sprintf("%s/%s", servicePort.TargetPort.String(), servicePort.Protocol)
+	}
+
+	if len(ctrl.VectorAggregator.Spec.Ports) > 0 {
+		aggregatorPorts := parsePorts(ctrl.VectorAggregator.Spec.Ports)
+		for _, port := range aggregatorPorts {
+			m[keyFromServicePort(port)] = port
+		}
+	}
+	autoDiscoveredPorts := ctrl.Config.GetSourcesPorts()
+	for _, port := range autoDiscoveredPorts {
+		if _, ok := m[keyFromServicePort(port)]; !ok {
+			m[keyFromServicePort(port)] = port
+		}
+	}
+	ports := make([]corev1.ServicePort, 0, len(m))
+	for _, port := range m {
+		ports = append(ports, port)
+	}
 
 	if ctrl.VectorAggregator.Spec.Api.Enabled {
 		ports = append(ports, corev1.ServicePort{

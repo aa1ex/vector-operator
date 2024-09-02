@@ -6,37 +6,63 @@ import (
 	"net"
 )
 
-func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, []string, error) {
+func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
 	cfg := newVectorConfig(params)
 
 	cfg.Sources = make(map[string]*Source)
 	cfg.Transforms = make(map[string]*Transform)
 	cfg.Sinks = make(map[string]*Sink)
 
-	kubernetesEventsPorts := make([]string, 0)
+	cfg.internal.kubernetesEventsListeners = make([]string, 0)
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
 		if err := unmarshalJson(pipeline.GetSpec(), p); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
+			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
+		}
+		if p.Transforms == nil {
+			p.Transforms = make(map[string]*Transform)
 		}
 		for k, v := range p.Sources {
-			// TODO(aa1ex): validate source types
+			// TODO(aa1ex): validate source type
 			settings := v
+			sourceName := k
 			if v.Type == kuberneteEventsType {
 				address := v.Options["address"].(string)
+				if address == "" {
+					return nil, fmt.Errorf("address is empty from %s", pipeline.GetName())
+				}
+				protocol, _ := v.Options["mode"].(string)
+				if protocol == "" {
+					protocol = "tcp"
+				}
+				if protocol != "tcp" && protocol != "udp" {
+					return nil, fmt.Errorf("unsupported mode '%s' for %s pipeline", v.Options["mode"], pipeline.GetName())
+				}
+				_, port, err := net.SplitHostPort(address)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse address %s: %w", address, err)
+				}
+				sourceName = fmt.Sprintf("--%s--", k)
 				settings = &Source{
-					Name: k,
+					Name: sourceName,
 					Type: SocketType,
 					Options: map[string]any{
-						"mode":    "tcp", // TODO(aa1ex): hardcode
+						"mode":    protocol,
 						"address": address,
 					},
 				}
-				_, port, _ := net.SplitHostPort(address) // TODO(aa1ex): handle error
-				kubernetesEventsPorts = append(kubernetesEventsPorts, port)
+				cfg.internal.kubernetesEventsListeners = append(cfg.internal.kubernetesEventsListeners, fmt.Sprintf("%s:%s/%s", pipeline.GetNamespace(), port, protocol))
+				p.Transforms[k] = &Transform{
+					Name:   k,
+					Inputs: []string{sourceName},
+					Type:   "remap",
+					Options: map[string]interface{}{
+						"source": ".message = parse_json!(string!(.message))",
+					},
+				}
 			}
-			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
+			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), sourceName)
 			cfg.Sources[v.Name] = settings
 		}
 		for k, v := range p.Transforms {
@@ -64,5 +90,5 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 		cfg.PipelineConfig = defaultAggregatorPipelineConfig
 	}
 
-	return cfg, kubernetesEventsPorts, nil
+	return cfg, nil
 }

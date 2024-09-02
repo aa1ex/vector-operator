@@ -20,6 +20,7 @@ type VectorConfig struct {
 	DataDir        string   `yaml:"data_dir"`
 	Api            *ApiSpec `yaml:"api"`
 	PipelineConfig `yaml:",inline"`
+	internal       internalConfig `yaml:"-"`
 }
 
 type PipelineConfig struct {
@@ -63,4 +64,8 @@ type pipelineConfig_ struct {
 	Sources    map[string]interface{}
 	Transforms map[string]interface{}
 	Sinks      map[string]interface{}
+}
+
+type internalConfig struct {
+	kubernetesEventsListeners []string
 }

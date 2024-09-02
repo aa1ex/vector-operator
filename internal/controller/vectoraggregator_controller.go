@@ -21,7 +21,6 @@ import (
 	"errors"
 	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
-	"github.com/kaasops/vector-operator/internal/k8sevents"
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
@@ -57,7 +56,6 @@ type VectorAggregatorReconciler struct {
 	PipelineCheckWG      *sync.WaitGroup
 	PipelineCheckTimeout time.Duration
 	ConfigCheckTimeout   time.Duration
-	EventsManager        *k8sevents.EventsManager
 }
 
 // +kubebuilder:rbac:groups=observability.kaasops.io,resources=vectoraggregators,verbs=get;list;watch;create;update;patch;delete
@@ -70,6 +68,7 @@ type VectorAggregatorReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=list;watch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=clusterroles,verbs=get;list;watch;create;update;patch;delete
@@ -143,10 +142,7 @@ func (r *VectorAggregatorReconciler) findVectorAggregatorCustomResourceInstance(
 	vectorCR := &observabilityv1alpha1.VectorAggregator{}
 	err := r.Get(ctx, req.NamespacedName, vectorCR)
 	if err != nil {
-		if api_errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
+		return nil, client.IgnoreNotFound(err)
 	}
 	return vectorCR, nil
 }
@@ -175,7 +171,7 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 	}
 
 	// Get Config in Json ([]byte)
-	cfg, k8sEventsPorts, err := config.BuildAggregatorConfig(config.VectorConfigParams{
+	cfg, err := config.BuildAggregatorConfig(config.VectorConfigParams{
 		ApiEnabled:        vaCtrl.VectorAggregator.Spec.Api.Enabled,
 		PlaygroundEnabled: vaCtrl.VectorAggregator.Spec.Api.Playground,
 		InternalMetrics:   vaCtrl.VectorAggregator.Spec.InternalMetrics,
@@ -229,14 +225,6 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, err
-	}
-
-	if len(k8sEventsPorts) > 0 {
-		for _, port := range k8sEventsPorts {
-			if err := r.EventsManager.AddSubscriber(vaCtrl.GetServiceName(), port, ""); err != nil {
-				log.Error(err, "Failed to add k8s events subscriber")
-			}
-		}
 	}
 
 	return ctrl.Result{}, nil
