@@ -41,9 +41,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			rec := strings.Split(v, ":")
 			ns := rec[0]
 			parts := strings.Split(rec[1], "/")
-			if err := r.EventsManager.AddSubscriber(fmt.Sprintf("%s.%s", svc.Name, svc.Namespace), parts[0], parts[1], ns); err != nil {
-				log.Error(err, "Failed to subscribe to events", "service", svc.Name)
-			}
+			r.EventsManager.RegisterSubscriber(fmt.Sprintf("%s.%s", svc.Name, svc.Namespace), parts[0], parts[1], ns)
 		}
 	}
 

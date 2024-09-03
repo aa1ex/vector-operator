@@ -25,6 +25,7 @@ import (
 	"net"
 	goyaml "sigs.k8s.io/yaml"
 	"strconv"
+	"strings"
 
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
 	"github.com/kaasops/vector-operator/internal/vector/agent"
@@ -117,7 +118,7 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 				if isValidPort(portN) {
 					ports = append(ports, corev1.ServicePort{
 						Name:       "port-" + port,
-						Protocol:   corev1.ProtocolTCP,
+						Protocol:   extractProtocol(s.Options),
 						Port:       int32(portN),
 						TargetPort: intstr.FromInt32(int32(portN)),
 					})
@@ -128,6 +129,10 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 	return ports
 }
 
+func (c *VectorConfig) GetKubernetesEventsPorts() []string {
+	return c.internal.kubernetesEventsListeners
+}
+
 func isValidPort(portN int) bool {
 	if portN < 0 || portN > 65535 {
 		return false
@@ -135,6 +140,12 @@ func isValidPort(portN int) bool {
 	return true
 }
 
-func (c *VectorConfig) GetKubernetesEventsPorts() []string {
-	return c.internal.kubernetesEventsListeners
+func extractProtocol(opts map[string]any) corev1.Protocol {
+	protocol := corev1.ProtocolTCP
+	if val, ok := opts["mode"]; ok {
+		if s, ok := val.(string); ok && strings.ToLower(s) == "udp" {
+			return corev1.ProtocolUDP
+		}
+	}
+	return protocol
 }

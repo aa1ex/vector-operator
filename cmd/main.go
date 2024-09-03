@@ -218,11 +218,8 @@ func main() {
 	}
 
 	if err = (&controller.ServiceReconciler{
-		Client: mgr.GetClient(),
-		EventsManager: k8sevents.NewEventsManager(
-			clientset,
-			ctrl.Log.WithName("kubernetes-events-manager"),
-			true),
+		Client:        mgr.GetClient(),
+		EventsManager: k8sevents.NewEventsManager(clientset, ctrl.Log.WithName("kubernetes-events-manager")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceController")
 		os.Exit(1)
