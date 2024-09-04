@@ -17,17 +17,13 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
-		if err := unmarshalJson(pipeline.GetSpec(), p); err != nil {
+		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
-		}
-		if p.Transforms == nil {
-			p.Transforms = make(map[string]*Transform)
 		}
 		for k, v := range p.Sources {
 			// TODO(aa1ex): validate source type
 			settings := v
-			sourceName := k
-			if v.Type == kuberneteEventsType {
+			if v.Type == kubernetesEventsType {
 				address := v.Options["address"].(string)
 				if address == "" {
 					return nil, fmt.Errorf("address is empty from %s", pipeline.GetName())
@@ -43,9 +39,8 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 				if err != nil {
 					return nil, fmt.Errorf("failed to parse address %s: %w", address, err)
 				}
-				sourceName = fmt.Sprintf("--%s--", k)
 				settings = &Source{
-					Name: sourceName,
+					Name: k,
 					Type: SocketType,
 					Options: map[string]any{
 						"mode":    protocol,
@@ -53,16 +48,8 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 					},
 				}
 				cfg.internal.kubernetesEventsListeners = append(cfg.internal.kubernetesEventsListeners, fmt.Sprintf("%s:%s/%s", pipeline.GetNamespace(), port, protocol))
-				p.Transforms[k] = &Transform{
-					Name:   k,
-					Inputs: []string{sourceName},
-					Type:   "remap",
-					Options: map[string]interface{}{
-						"source": ".message = parse_json!(string!(.message))",
-					},
-				}
 			}
-			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), sourceName)
+			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			cfg.Sources[v.Name] = settings
 		}
 		for k, v := range p.Transforms {

@@ -7,15 +7,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type VectorRole string
+type VectorPipelineRole string
 
 const (
-	VectorRoleAgent      = "agent"
-	VectorRoleAggregator = "aggregator"
-)
-
-var (
-	LocalPipelineKind = "VectorPipeline"
+	VectorPipelineRoleAgent      VectorPipelineRole = "agent"
+	VectorPipelineRoleAggregator VectorPipelineRole = "aggregator"
 )
 
 func (vp *VectorPipeline) GetSpec() VectorPipelineSpec {
@@ -57,11 +53,9 @@ func (vp *VectorPipeline) UpdateStatus(ctx context.Context, c client.Client) err
 	return k8s.UpdateStatus(ctx, vp, c)
 }
 
-func (vp *VectorPipeline) VectorRole() VectorRole {
-	role := VectorRoleAgent
-	annotations := vp.ObjectMeta.GetAnnotations()
-	if v, ok := annotations["observability.kaasops.io/vector-role"]; ok { // TODO(aa1ex): add validation
-		role = v
+func (vp *VectorPipeline) GetRole() VectorPipelineRole {
+	if vp.Status.Role == nil {
+		return ""
 	}
-	return VectorRole(role)
+	return *vp.Status.Role
 }

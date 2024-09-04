@@ -7,10 +7,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	ClusterPipelineKind = "ClusterVectorPipeline"
-)
-
 func (vp *ClusterVectorPipeline) GetSpec() VectorPipelineSpec {
 	return vp.Spec
 }
@@ -50,11 +46,9 @@ func (vp *ClusterVectorPipeline) UpdateStatus(ctx context.Context, c client.Clie
 	return k8s.UpdateStatus(ctx, vp, c)
 }
 
-func (vp *ClusterVectorPipeline) VectorRole() VectorRole {
-	role := VectorRoleAgent
-	annotations := vp.ObjectMeta.GetAnnotations()
-	if v, ok := annotations["observability.kaasops.io/vector-role"]; ok { // TODO(aa1ex): add validation
-		role = v
+func (vp *ClusterVectorPipeline) GetRole() VectorPipelineRole {
+	if vp.Status.Role == nil {
+		return ""
 	}
-	return VectorRole(role)
+	return *vp.Status.Role
 }

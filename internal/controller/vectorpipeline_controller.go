@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/kaasops/vector-operator/internal/vector/aggregator"
 	"sync"
@@ -114,7 +115,16 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if pipelineCR.VectorRole() == vectorv1alpha1.VectorRoleAgent {
+	pipelineVectorRole := pipelineCR.GetRole()
+	if pipelineVectorRole == "" {
+		p := &config.PipelineConfig{}
+		if err := config.UnmarshalJson(pipelineCR.GetSpec(), p); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
+		}
+		pipelineVectorRole = p.VectorRole()
+	}
+
+	if pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAgent {
 		for _, vector := range vectorInstances {
 			if vector.DeletionTimestamp != nil {
 				continue

@@ -66,7 +66,7 @@ func newVectorConfig(p VectorConfigParams) *VectorConfig {
 	}
 }
 
-func unmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) error {
+func UnmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) error {
 	b, err := json.Marshal(spec)
 	if err != nil {
 		return err
@@ -127,6 +127,32 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 		}
 	}
 	return ports
+}
+
+func (c *PipelineConfig) VectorRole() vectorv1alpha1.VectorPipelineRole {
+	if len(c.Sources) == 0 {
+		return ""
+	}
+	agentCount := 0
+	aggregatorCount := 0
+	for _, s := range c.Sources {
+		switch {
+		case isAgent(s.Type):
+			agentCount++
+			fallthrough // some types can be both an agent and an aggregator at the same time
+		case isAggregator(s.Type):
+			aggregatorCount++
+		default:
+			return ""
+		}
+	}
+	switch {
+	case len(c.Sources) == agentCount:
+		return vectorv1alpha1.VectorPipelineRoleAgent
+	case len(c.Sources) == aggregatorCount:
+		return vectorv1alpha1.VectorPipelineRoleAggregator
+	}
+	return ""
 }
 
 func (c *VectorConfig) GetKubernetesEventsPorts() []string {

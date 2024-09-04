@@ -5,6 +5,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,7 +26,7 @@ func NewEventsManager(clientset *kubernetes.Clientset, logger Logger) *EventsMan
 }
 
 func (m *EventsManager) RegisterSubscriber(host, port, protocol, namespace string) {
-	key := namespace + ":" + host + ":" + port + ":" + protocol
+	key := host + ":" + namespace + ":" + port + ":" + protocol // TODO(aa1ex): key?
 
 	addr := net.JoinHostPort(host, port)
 	c := newClient(protocol, addr, m.logger)
@@ -38,6 +39,17 @@ func (m *EventsManager) RegisterSubscriber(host, port, protocol, namespace strin
 	m.mx.Unlock()
 
 	c.watchEvents(m.client, namespace)
+}
+
+func (m *EventsManager) UnregisterSubscriber(host string) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	for key, c := range m.mp {
+		if strings.HasPrefix(key, host+":") {
+			c.close()
+			delete(m.mp, key)
+		}
+	}
 }
 
 func eventTimestamp(ev *corev1.Event) time.Time {

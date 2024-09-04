@@ -166,7 +166,7 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 	vaCtrl := aggregator.NewController(v, client, clientset)
 
 	// Get Vector Config file
-	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, observabilityv1alpha1.VectorRoleAggregator)
+	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, observabilityv1alpha1.VectorPipelineRoleAggregator)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

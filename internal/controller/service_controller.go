@@ -30,18 +30,19 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	svc := &corev1.Service{}
 	err := r.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
-		// TODO(aa1ex): deleteSubscriber
+		r.EventsManager.UnregisterSubscriber(fmt.Sprintf("%s.%s", svc.Name, svc.Namespace))
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	value, _ := svc.Annotations[k8sEventsAnnotation]
 	if value != "" {
+		host := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
 		list := strings.Split(value, ",")
 		for _, v := range list {
 			rec := strings.Split(v, ":")
 			ns := rec[0]
 			parts := strings.Split(rec[1], "/")
-			r.EventsManager.RegisterSubscriber(fmt.Sprintf("%s.%s", svc.Name, svc.Namespace), parts[0], parts[1], ns)
+			r.EventsManager.RegisterSubscriber(host, parts[0], parts[1], ns)
 		}
 	}
 

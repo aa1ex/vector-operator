@@ -69,6 +69,8 @@ spec:
                 type: boolean
               reason:
                 type: string
+              role:
+                type: string
             required:
             - configCheckResult
             type: object

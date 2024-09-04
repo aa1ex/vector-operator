@@ -31,7 +31,7 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
-		if err := unmarshalJson(pipeline.GetSpec(), p); err != nil {
+		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
 		for k, v := range p.Sources {

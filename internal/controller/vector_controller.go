@@ -174,7 +174,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	vaCtrl := agent.NewController(v, client, clientset)
 
 	// Get Vector Config file
-	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, vectorv1alpha1.VectorRoleAgent)
+	pipelines, err := pipeline.GetValidPipelines(ctx, vaCtrl.Client, vectorv1alpha1.VectorPipelineRoleAgent)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
