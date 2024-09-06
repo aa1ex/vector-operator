@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
 	"github.com/kaasops/vector-operator/internal/pipeline"
@@ -31,8 +32,11 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sync"
 	"time"
@@ -46,6 +50,8 @@ import (
 )
 
 var VectorAggregatorReconciliationSourceChannel = make(chan event.GenericEvent)
+
+const aggregatorFinalizerName = "vectoraggregator.observability.kaasops.io/finalizer"
 
 // VectorAggregatorReconciler reconciles a VectorAggregator object
 type VectorAggregatorReconciler struct {
@@ -84,32 +90,59 @@ type VectorAggregatorReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *VectorAggregatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("VectorAggregator", req.NamespacedName)
+	log := log.FromContext(ctx)
 	log.Info("Waiting pipeline checks")
 	if waitPipelineChecks(r.PipelineCheckWG, r.PipelineCheckTimeout) {
 		log.Info("Timeout waiting pipeline checks, continue reconcile vector")
 	}
 	log.Info("Start Reconcile VectorAggregator")
-	if req.Namespace == "" {
-		vectorAggregators, err := listVectorAggregatorCustomResourceInstances(ctx, r.Client)
+
+	if req.Namespace == "" { // cluster resources (ClusterRole and ClusterRoleBinding) don't have ns
+		vectorAggregators, err := listVectorAggregators(ctx, r.Client)
 		if err != nil {
 			log.Error(err, "Failed to list vector aggregators instances")
 			return ctrl.Result{}, err
 		}
-		return r.reconcileVectorAggregators(ctx, r.Client, r.Clientset, vectorAggregators...)
+		filtered := make([]*observabilityv1alpha1.VectorAggregator, 0, len(vectorAggregators))
+		for _, vector := range vectorAggregators {
+			if vector.Name == req.Name {
+				filtered = append(filtered, vector)
+			}
+		}
+		return r.reconcileVectorAggregators(ctx, r.Client, r.Clientset, filtered...)
 	}
 
-	vectorCR, err := r.findVectorAggregatorCustomResourceInstance(ctx, req)
+	vectorCR := &observabilityv1alpha1.VectorAggregator{}
+	err := r.Get(ctx, req.NamespacedName, vectorCR)
 	if err != nil {
-		log.Error(err, "Failed to get Vector")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if vectorCR == nil {
-		log.Info("Vector CR not found. Ignoring since object must be deleted")
+
+	if vectorCR.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(vectorCR, aggregatorFinalizerName) {
+			controllerutil.AddFinalizer(vectorCR, aggregatorFinalizerName)
+			if err := r.Update(ctx, vectorCR); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(vectorCR, aggregatorFinalizerName) {
+			if err := r.deleteVectorAggregator(ctx, vectorCR); err != nil {
+				if !api_errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+			}
+			controllerutil.RemoveFinalizer(vectorCR, aggregatorFinalizerName)
+			if err := r.Update(ctx, vectorCR); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
-	return r.createOrUpdateVectorAggregator(ctx, r.Client, r.Clientset, vectorCR)
+	res, err := r.createOrUpdateVectorAggregator(ctx, r.Client, r.Clientset, vectorCR)
+	fmt.Println(err)
+	return res, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -119,7 +152,7 @@ func (r *VectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&observabilityv1alpha1.VectorAggregator{}).
+		For(&observabilityv1alpha1.VectorAggregator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		WatchesRawSource(source.Channel(VectorAggregatorReconciliationSourceChannel, &handler.EnqueueRequestForObject{})).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
@@ -138,17 +171,7 @@ func (r *VectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func (r *VectorAggregatorReconciler) findVectorAggregatorCustomResourceInstance(ctx context.Context, req ctrl.Request) (*observabilityv1alpha1.VectorAggregator, error) {
-	// fetch the master instance
-	vectorCR := &observabilityv1alpha1.VectorAggregator{}
-	err := r.Get(ctx, req.NamespacedName, vectorCR)
-	if err != nil {
-		return nil, client.IgnoreNotFound(err)
-	}
-	return vectorCR, nil
-}
-
-func listVectorAggregatorCustomResourceInstances(ctx context.Context, client client.Client) (vectors []*observabilityv1alpha1.VectorAggregator, err error) {
+func listVectorAggregators(ctx context.Context, client client.Client) (vectors []*observabilityv1alpha1.VectorAggregator, err error) {
 	vectorList := observabilityv1alpha1.VectorAggregatorList{}
 	err = client.List(ctx, &vectorList)
 	if err != nil {
@@ -245,4 +268,8 @@ func (r *VectorAggregatorReconciler) reconcileVectorAggregators(ctx context.Cont
 		}
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *VectorAggregatorReconciler) deleteVectorAggregator(ctx context.Context, v *observabilityv1alpha1.VectorAggregator) error {
+	return aggregator.NewController(v, r.Client, r.Clientset).DeleteVectorAggregator(ctx)
 }

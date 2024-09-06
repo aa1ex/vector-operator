@@ -90,3 +90,11 @@ func (ctrl *Controller) createVectorAggregatorClusterRoleBinding() *rbacv1.Clust
 
 	return clusterRoleBinding
 }
+
+func (ctrl *Controller) deleteVectorAggregatorClusterRole(ctx context.Context) error {
+	return ctrl.Client.Delete(ctx, ctrl.createVectorAggregatorClusterRole())
+}
+
+func (ctrl *Controller) deleteVectorAggregatorClusterRoleBinding(ctx context.Context) error {
+	return ctrl.Client.Delete(ctx, ctrl.createVectorAggregatorClusterRoleBinding())
+}

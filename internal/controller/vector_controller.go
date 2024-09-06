@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sync"
 	"time"
 
@@ -49,6 +50,8 @@ import (
 	monitorv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
+const agentFinalizerName = "vector.observability.kaasops.io/finalizer"
+
 // VectorReconciler reconciles a Vector object
 type VectorReconciler struct {
 	client.Client
@@ -73,28 +76,52 @@ type VectorReconciler struct {
 // +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=clusterroles,verbs=get;list;watch;create;update;patch;delete
 
 func (r *VectorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("Vector", req.NamespacedName)
+	log := log.FromContext(ctx)
 	log.Info("Waiting pipeline checks")
 	if waitPipelineChecks(r.PipelineCheckWG, r.PipelineCheckTimeout) {
 		log.Info("Timeout waiting pipeline checks, continue reconcile vector")
 	}
 	log.Info("Start Reconcile Vector")
 	if req.Namespace == "" {
-		vectors, err := listVectorCustomResourceInstances(ctx, r.Client)
+		vectors, err := listVectorAgents(ctx, r.Client)
 		if err != nil {
 			log.Error(err, "Failed to list vector instances")
 			return ctrl.Result{}, err
 		}
+		filtered := make([]*vectorv1alpha1.Vector, 0, len(vectors))
+		for _, vector := range vectors {
+			if vector.Name == req.Name {
+				filtered = append(filtered, vector)
+			}
+		}
 		return r.reconcileVectors(ctx, r.Client, r.Clientset, false, vectors...)
 	}
 
-	vectorCR, err := r.findVectorCustomResourceInstance(ctx, req)
+	vectorCR := &vectorv1alpha1.Vector{}
+	err := r.Get(ctx, req.NamespacedName, vectorCR)
 	if err != nil {
-		log.Error(err, "Failed to get Vector")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if vectorCR == nil {
-		log.Info("Vector CR not found. Ignoring since object must be deleted")
+
+	if vectorCR.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(vectorCR, agentFinalizerName) {
+			controllerutil.AddFinalizer(vectorCR, agentFinalizerName)
+			if err := r.Update(ctx, vectorCR); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(vectorCR, agentFinalizerName) {
+			if err := r.deleteVectorAgent(ctx, vectorCR); err != nil {
+				if !api_errors.IsNotFound(err) {
+					return ctrl.Result{}, err
+				}
+			}
+			controllerutil.RemoveFinalizer(vectorCR, agentFinalizerName)
+			if err := r.Update(ctx, vectorCR); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -127,7 +154,7 @@ func (r *VectorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func listVectorCustomResourceInstances(ctx context.Context, client client.Client) (vectors []*vectorv1alpha1.Vector, err error) {
+func listVectorAgents(ctx context.Context, client client.Client) (vectors []*vectorv1alpha1.Vector, err error) {
 	vectorlist := vectorv1alpha1.VectorList{}
 	err = client.List(ctx, &vectorlist)
 	if err != nil {
@@ -137,19 +164,6 @@ func listVectorCustomResourceInstances(ctx context.Context, client client.Client
 		vectors = append(vectors, &vector)
 	}
 	return vectors, nil
-}
-
-func (r *VectorReconciler) findVectorCustomResourceInstance(ctx context.Context, req ctrl.Request) (*vectorv1alpha1.Vector, error) {
-	// fetch the master instance
-	vectorCR := &vectorv1alpha1.Vector{}
-	err := r.Get(ctx, req.NamespacedName, vectorCR)
-	if err != nil {
-		if api_errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return vectorCR, nil
 }
 
 func (r *VectorReconciler) reconcileVectors(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, configOnly bool, vectors ...*vectorv1alpha1.Vector) (ctrl.Result, error) {
@@ -233,6 +247,10 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VectorReconciler) deleteVectorAgent(ctx context.Context, v *vectorv1alpha1.Vector) error {
+	return agent.NewController(v, r.Client, r.Clientset).DeleteVectorAgent(ctx)
 }
 
 func waitPipelineChecks(wg *sync.WaitGroup, timeout time.Duration) bool {

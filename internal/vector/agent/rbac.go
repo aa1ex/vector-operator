@@ -17,6 +17,7 @@ limitations under the License.
 package agent
 
 import (
+	"context"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
@@ -71,4 +72,12 @@ func (ctrl *Controller) createVectorAgentClusterRoleBinding() *rbacv1.ClusterRol
 	}
 
 	return clusterRoleBinding
+}
+
+func (ctrl *Controller) deleteVectorAgentClusterRole(ctx context.Context) error {
+	return ctrl.Client.Delete(ctx, ctrl.createVectorAgentClusterRole())
+}
+
+func (ctrl *Controller) deleteVectorAgentClusterRoleBinding(ctx context.Context) error {
+	return ctrl.Client.Delete(ctx, ctrl.createVectorAgentClusterRoleBinding())
 }

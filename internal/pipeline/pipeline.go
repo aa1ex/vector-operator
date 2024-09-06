@@ -18,7 +18,6 @@ package pipeline
 
 import (
 	"context"
-
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -34,7 +33,8 @@ type Pipeline interface {
 	IsValid() bool
 	IsDeleted() bool
 	UpdateStatus(context.Context, client.Client) error
-	GetRole() vectorv1alpha1.VectorPipelineRole
+	GetRole() *vectorv1alpha1.VectorPipelineRole
+	SetRole(*vectorv1alpha1.VectorPipelineRole)
 }
 
 func GetValidPipelines(ctx context.Context, client client.Client, filterRole vectorv1alpha1.VectorPipelineRole) ([]Pipeline, error) {
@@ -49,14 +49,14 @@ func GetValidPipelines(ctx context.Context, client client.Client, filterRole vec
 	}
 	if len(vps) != 0 {
 		for _, vp := range vps {
-			if !vp.IsDeleted() && vp.IsValid() && vp.GetRole() == filterRole {
+			if !vp.IsDeleted() && vp.IsValid() && vp.GetRole() == &filterRole {
 				validPipelines = append(validPipelines, vp.DeepCopy())
 			}
 		}
 	}
 	if len(cvps) != 0 {
 		for _, cvp := range cvps {
-			if !cvp.IsDeleted() && cvp.IsValid() && cvp.GetRole() == filterRole {
+			if !cvp.IsDeleted() && cvp.IsValid() && cvp.GetRole() == &filterRole {
 				validPipelines = append(validPipelines, cvp.DeepCopy())
 			}
 		}
@@ -67,25 +67,22 @@ func GetValidPipelines(ctx context.Context, client client.Client, filterRole vec
 func SetSuccessStatus(ctx context.Context, client client.Client, p Pipeline) error {
 	p.SetConfigCheck(true)
 	p.SetReason(nil)
-
-	return p.UpdateStatus(ctx, client)
-}
-
-func SetFailedStatus(ctx context.Context, client client.Client, p Pipeline, reason string) error {
-
-	p.SetConfigCheck(false)
-	p.SetReason(&reason)
-
-	return p.UpdateStatus(ctx, client)
-}
-
-func SetLastAppliedPipelineStatus(ctx context.Context, client client.Client, p Pipeline) error {
 	hash, err := GetSpecHash(p)
 	if err != nil {
 		return err
 	}
 	p.SetLastAppliedPipeline(hash)
+	return p.UpdateStatus(ctx, client)
+}
 
+func SetFailedStatus(ctx context.Context, client client.Client, p Pipeline, reason string) error {
+	p.SetConfigCheck(false)
+	p.SetReason(&reason)
+	hash, err := GetSpecHash(p)
+	if err != nil {
+		return err
+	}
+	p.SetLastAppliedPipeline(hash)
 	return p.UpdateStatus(ctx, client)
 }
 

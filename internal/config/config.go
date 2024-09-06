@@ -19,6 +19,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -129,9 +130,9 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 	return ports
 }
 
-func (c *PipelineConfig) VectorRole() vectorv1alpha1.VectorPipelineRole {
+func (c *PipelineConfig) VectorRole() (*vectorv1alpha1.VectorPipelineRole, error) {
 	if len(c.Sources) == 0 {
-		return ""
+		return nil, fmt.Errorf("sources list is empty")
 	}
 	agentCount := 0
 	aggregatorCount := 0
@@ -143,16 +144,18 @@ func (c *PipelineConfig) VectorRole() vectorv1alpha1.VectorPipelineRole {
 		case isAggregator(s.Type):
 			aggregatorCount++
 		default:
-			return ""
+			return nil, fmt.Errorf("unsupported source type: %s", s.Type)
 		}
 	}
 	switch {
 	case len(c.Sources) == agentCount:
-		return vectorv1alpha1.VectorPipelineRoleAgent
+		role := vectorv1alpha1.VectorPipelineRoleAgent
+		return &role, nil
 	case len(c.Sources) == aggregatorCount:
-		return vectorv1alpha1.VectorPipelineRoleAggregator
+		role := vectorv1alpha1.VectorPipelineRoleAggregator
+		return &role, nil
 	}
-	return ""
+	return nil, fmt.Errorf("unknown vector role")
 }
 
 func (c *VectorConfig) GetKubernetesEventsPorts() []string {

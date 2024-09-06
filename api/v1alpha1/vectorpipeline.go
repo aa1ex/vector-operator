@@ -53,9 +53,10 @@ func (vp *VectorPipeline) UpdateStatus(ctx context.Context, c client.Client) err
 	return k8s.UpdateStatus(ctx, vp, c)
 }
 
-func (vp *VectorPipeline) GetRole() VectorPipelineRole {
-	if vp.Status.Role == nil {
-		return ""
-	}
-	return *vp.Status.Role
+func (vp *VectorPipeline) GetRole() *VectorPipelineRole {
+	return vp.Status.Role
+}
+
+func (vp *VectorPipeline) SetRole(role *VectorPipelineRole) {
+	vp.Status.Role = role
 }

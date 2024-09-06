@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/kaasops/vector-operator/internal/vector/aggregator"
+	"golang.org/x/sync/errgroup"
 	"sync"
 	"time"
 
@@ -65,26 +66,26 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	vectorInstances, err := listVectorCustomResourceInstances(ctx, r.Client)
+	vectorAgents, err := listVectorAgents(ctx, r.Client)
 	if err != nil {
 		log.Error(err, "Failed to get Instances")
 		return ctrl.Result{}, nil
 	}
 
-	vectorAggregatorsInstances, err := listVectorAggregatorCustomResourceInstances(ctx, r.Client)
+	vectorAggregators, err := listVectorAggregators(ctx, r.Client)
 	if err != nil {
 		log.Error(err, "Failed to get Instances")
 		return ctrl.Result{}, nil
 	}
 
-	if len(vectorInstances) == 0 && len(vectorAggregatorsInstances) == 0 {
+	if len(vectorAgents) == 0 && len(vectorAggregators) == 0 {
 		log.Info("Vectors not found")
 		return ctrl.Result{}, nil
 	}
 
 	if pipelineCR == nil {
 		log.Info("Pipeline CR not found. Ignoring since object must be deleted")
-		for _, vector := range vectorInstances {
+		for _, vector := range vectorAgents {
 			r.PipelineCheckWG.Add(1)
 			go func() {
 				VectorAgentReconciliationSourceChannel <- event.GenericEvent{Object: vector}
@@ -93,7 +94,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				r.PipelineCheckWG.Done()
 			}()
 		}
-		for _, vector := range vectorAggregatorsInstances {
+		for _, vector := range vectorAggregators {
 			r.PipelineCheckWG.Add(1)
 			go func() {
 				VectorAggregatorReconciliationSourceChannel <- event.GenericEvent{Object: vector}
@@ -116,92 +117,113 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	pipelineVectorRole := pipelineCR.GetRole()
-	if pipelineVectorRole == "" {
+	if pipelineVectorRole == nil {
 		p := &config.PipelineConfig{}
 		if err := config.UnmarshalJson(pipelineCR.GetSpec(), p); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
 		}
-		pipelineVectorRole = p.VectorRole()
+		pipelineVectorRole, err = p.VectorRole()
+		if err != nil {
+			if err = pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
+				log.Error(err, "Failed to set pipeline status")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		pipelineCR.SetRole(pipelineVectorRole)
 	}
 
-	if pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAgent {
-		for _, vector := range vectorInstances {
+	if *pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAgent {
+
+		g, ctx := errgroup.WithContext(ctx)
+
+		for _, vector := range vectorAgents {
 			if vector.DeletionTimestamp != nil {
 				continue
 			}
 
-			// Init Controller for Vector Agent
-			vaCtrl := agent.NewController(vector, r.Client, r.Clientset)
+			g.Go(func() error {
+				r.PipelineCheckWG.Add(1)
 
-			// Get Vector Config file
-			byteConfig, err := config.BuildAgentConfig(config.VectorConfigParams{
-				ApiEnabled:        vaCtrl.Vector.Spec.Agent.Api.Enabled,
-				PlaygroundEnabled: vaCtrl.Vector.Spec.Agent.Api.Playground,
-				UseApiServerCache: vaCtrl.Vector.Spec.UseApiServerCache,
-				InternalMetrics:   vaCtrl.Vector.Spec.Agent.InternalMetrics,
-			}, pipelineCR)
-			if err != nil {
-				if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, pipelineCR); err != nil {
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, err
-			}
+				vaCtrl := agent.NewController(vector, r.Client, r.Clientset)
 
-			vaCtrl.Config = byteConfig
-			r.PipelineCheckWG.Add(1)
-			go r.runPipelineCheck(ctx, pipelineCR, vaCtrl)
+				byteConfig, err := config.BuildAgentConfig(config.VectorConfigParams{
+					ApiEnabled:        vaCtrl.Vector.Spec.Agent.Api.Enabled,
+					PlaygroundEnabled: vaCtrl.Vector.Spec.Agent.Api.Playground,
+					UseApiServerCache: vaCtrl.Vector.Spec.UseApiServerCache,
+					InternalMetrics:   vaCtrl.Vector.Spec.Agent.InternalMetrics,
+				}, pipelineCR)
+				if err != nil {
+					return err
+				}
+
+				vaCtrl.Config = byteConfig
+
+				return r.runPipelineCheck(ctx, pipelineCR, vaCtrl)
+			})
 		}
-	} else { // Aggregator
 
-		for _, vector := range vectorAggregatorsInstances {
+		if err = g.Wait(); err != nil {
+			if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+
+	} else if *pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAggregator {
+
+		g, ctx := errgroup.WithContext(ctx)
+
+		for _, vector := range vectorAggregators {
+
 			if vector.DeletionTimestamp != nil {
 				continue
 			}
 
-			// Init Controller for Vector Aggregator
-			vaCtrl := aggregator.NewController(vector, r.Client, r.Clientset)
+			g.Go(func() error {
+				r.PipelineCheckWG.Add(1)
 
-			// Get Vector Config file
-			cfg, err := config.BuildAggregatorConfig(config.VectorConfigParams{
-				ApiEnabled:        vaCtrl.VectorAggregator.Spec.Api.Enabled,
-				PlaygroundEnabled: vaCtrl.VectorAggregator.Spec.Api.Playground,
-				InternalMetrics:   vaCtrl.VectorAggregator.Spec.InternalMetrics,
-			}, pipelineCR)
-			if err != nil {
-				if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
-					return ctrl.Result{}, err
+				vaCtrl := aggregator.NewController(vector, r.Client, r.Clientset)
+
+				cfg, err := config.BuildAggregatorConfig(config.VectorConfigParams{
+					ApiEnabled:        vaCtrl.VectorAggregator.Spec.Api.Enabled,
+					PlaygroundEnabled: vaCtrl.VectorAggregator.Spec.Api.Playground,
+					InternalMetrics:   vaCtrl.VectorAggregator.Spec.InternalMetrics,
+				}, pipelineCR)
+				if err != nil {
+					return err
 				}
-				if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, pipelineCR); err != nil {
-					return ctrl.Result{}, err
+
+				byteConfig, err := cfg.MarshalJSON()
+				if err != nil {
+					return err
 				}
+
+				vaCtrl.ConfigBytes = byteConfig
+				vaCtrl.Config = cfg
+
+				return r.runPipelineCheckAggregator(ctx, pipelineCR, vaCtrl)
+			})
+		}
+
+		if err = g.Wait(); err != nil {
+			if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
-
-			byteConfig, err := cfg.MarshalJSON()
-			// TODO(aa1ex): remove copy paste
-			if err != nil {
-				if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, pipelineCR); err != nil {
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, err
-			}
-
-			vaCtrl.ConfigBytes = byteConfig
-			vaCtrl.Config = cfg
-
-			r.PipelineCheckWG.Add(1)
-			go r.runPipelineCheckAggregator(ctx, pipelineCR, vaCtrl)
+			return ctrl.Result{}, nil
 		}
 	}
 
 	log.Info("finish Reconcile Pipeline")
-	return ctrl.Result{}, nil
+
+	for _, vAgent := range vectorAgents {
+		VectorAgentReconciliationSourceChannel <- event.GenericEvent{Object: vAgent}
+	}
+	for _, vAggregator := range vectorAggregators {
+		VectorAggregatorReconciliationSourceChannel <- event.GenericEvent{Object: vAggregator}
+	}
+
+	return ctrl.Result{}, pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR)
 }
 
 func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Context, req ctrl.Request) (pipeline.Pipeline, error) {
@@ -213,13 +235,11 @@ func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Cont
 		}
 		return vp, nil
 	}
-
 	cvp := &vectorv1alpha1.ClusterVectorPipeline{}
 	if err := r.Get(ctx, req.NamespacedName, cvp); err != nil {
 		return nil, client.IgnoreNotFound(err)
 	}
 	return cvp, nil
-
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -231,7 +251,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pipeline, vaCtrl *agent.Controller) {
+func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pipeline, vaCtrl *agent.Controller) error {
 	log := log.FromContext(ctx).WithValues("Pipeline", p.GetName())
 	defer r.PipelineCheckWG.Done()
 
@@ -247,38 +267,17 @@ func (r *PipelineReconciler) runPipelineCheck(ctx context.Context, p pipeline.Pi
 		configcheck.ConfigCheckInitiatorPipieline,
 	).Run(ctx)
 	if reason != "" {
-		if err = pipeline.SetFailedStatus(ctx, r.Client, p, reason); err != nil {
-			log.Error(err, "Failed to set pipeline status")
-			return
-		}
-		if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, p); err != nil {
-			log.Error(err, "Failed to set pipeline status")
-			return
-		}
-		return
+		return fmt.Errorf(reason)
 	}
 	if err != nil {
 		log.Error(err, "ConfigCheck error")
-		return
+		return fmt.Errorf("config check: %w", err)
 	}
-
-	if err = pipeline.SetSuccessStatus(ctx, r.Client, p); err != nil {
-		log.Error(err, "Failed to set pipeline status")
-		return
-	}
-
-	if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, p); err != nil {
-		log.Error(err, "Failed to set pipeline status")
-		return
-	}
-	// Start vector reconciliation
-	if *p.GetConfigCheckResult() {
-		VectorAgentReconciliationSourceChannel <- event.GenericEvent{Object: vaCtrl.Vector}
-	}
+	return nil
 }
 
 // TODO(aa1ex): copy paste
-func (r *PipelineReconciler) runPipelineCheckAggregator(ctx context.Context, p pipeline.Pipeline, vaCtrl *aggregator.Controller) {
+func (r *PipelineReconciler) runPipelineCheckAggregator(ctx context.Context, p pipeline.Pipeline, vaCtrl *aggregator.Controller) error {
 	log := log.FromContext(ctx).WithValues("Pipeline", p.GetName())
 	defer r.PipelineCheckWG.Done()
 
@@ -294,32 +293,11 @@ func (r *PipelineReconciler) runPipelineCheckAggregator(ctx context.Context, p p
 		configcheck.ConfigCheckInitiatorPipieline,
 	).Run(ctx)
 	if reason != "" {
-		if err = pipeline.SetFailedStatus(ctx, r.Client, p, reason); err != nil {
-			log.Error(err, "Failed to set pipeline status")
-			return
-		}
-		if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, p); err != nil {
-			log.Error(err, "Failed to set pipeline status")
-			return
-		}
-		return
+		return fmt.Errorf(reason)
 	}
 	if err != nil {
 		log.Error(err, "ConfigCheck error")
-		return
+		return fmt.Errorf("config check: %w", err)
 	}
-
-	if err = pipeline.SetSuccessStatus(ctx, r.Client, p); err != nil {
-		log.Error(err, "Failed to set pipeline status")
-		return
-	}
-
-	if err = pipeline.SetLastAppliedPipelineStatus(ctx, r.Client, p); err != nil {
-		log.Error(err, "Failed to set pipeline status")
-		return
-	}
-	// Start vector reconciliation
-	if *p.GetConfigCheckResult() {
-		VectorAggregatorReconciliationSourceChannel <- event.GenericEvent{Object: vaCtrl.VectorAggregator}
-	}
+	return nil
 }

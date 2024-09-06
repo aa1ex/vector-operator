@@ -101,6 +101,16 @@ func (ctrl *Controller) EnsureVectorAgent(ctx context.Context, configOnly bool) 
 	return nil
 }
 
+func (ctrl *Controller) DeleteVectorAgent(ctx context.Context) error {
+	if err := ctrl.deleteVectorAgentClusterRole(ctx); err != nil {
+		return err
+	}
+	if err := ctrl.deleteVectorAgentClusterRoleBinding(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (ctrl *Controller) ensureVectorAgentRBAC(ctx context.Context) error {
 	log := log.FromContext(ctx).WithValues("vector-agent-rbac", ctrl.Vector.Name)
 

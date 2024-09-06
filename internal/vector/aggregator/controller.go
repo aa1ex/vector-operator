@@ -67,6 +67,16 @@ func (ctrl *Controller) EnsureVectorAggregator(ctx context.Context) error {
 	return nil
 }
 
+func (ctrl *Controller) DeleteVectorAggregator(ctx context.Context) error {
+	if err := ctrl.deleteVectorAggregatorClusterRole(ctx); err != nil {
+		return err
+	}
+	if err := ctrl.deleteVectorAggregatorClusterRoleBinding(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (ctrl *Controller) setDefault() { // TODO(aa1ex): webhook defaulter instead?
 	if ctrl.VectorAggregator.Spec.Image == "" {
 		ctrl.VectorAggregator.Spec.Image = "timberio/vector:0.28.1-distroless-libc"
