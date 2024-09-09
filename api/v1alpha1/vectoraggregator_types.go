@@ -26,8 +26,8 @@ import (
 // VectorAggregatorSpec defines the desired state of VectorAggregator
 type VectorAggregatorSpec struct {
 	VectorCommon `json:",inline"`
-	Replicas     int32    `json:"replicas,omitempty"`
-	Ports        []string `json:"ports,omitempty"`
+	Replicas     int32 `json:"replicas,omitempty"`
+	//Ports        []string `json:"ports,omitempty"`
 }
 
 // VectorAggregatorStatus defines the observed state of VectorAggregator

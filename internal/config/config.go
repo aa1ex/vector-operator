@@ -158,7 +158,7 @@ func (c *PipelineConfig) VectorRole() (*vectorv1alpha1.VectorPipelineRole, error
 	return nil, fmt.Errorf("unknown vector role")
 }
 
-func (c *VectorConfig) GetKubernetesEventsPorts() []string {
+func (c *VectorConfig) GetKubernetesEventsServicesPorts() []*KubernetesEventsListener {
 	return c.internal.kubernetesEventsListeners
 }
 

@@ -72,6 +72,7 @@ var aggregatorTypes = map[string]struct{}{
 	SplunkHECType:          {},
 	StatsDType:             {},
 	VectorType:             {},
+	kubernetesEventsType:   {}, // custom type
 }
 
 var agentTypes = map[string]struct{}{

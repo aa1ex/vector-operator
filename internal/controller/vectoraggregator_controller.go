@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
 	"github.com/kaasops/vector-operator/internal/pipeline"
@@ -141,7 +140,6 @@ func (r *VectorAggregatorReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	res, err := r.createOrUpdateVectorAggregator(ctx, r.Client, r.Clientset, vectorCR)
-	fmt.Println(err)
 	return res, err
 }
 

@@ -66,6 +66,13 @@ type pipelineConfig_ struct {
 	Sinks      map[string]interface{}
 }
 
+type KubernetesEventsListener struct {
+	Name      string
+	Namespace string
+	Port      int32
+	Protocol  string
+}
+
 type internalConfig struct {
-	kubernetesEventsListeners []string
+	kubernetesEventsListeners []*KubernetesEventsListener
 }

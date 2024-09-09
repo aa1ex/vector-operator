@@ -167,7 +167,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 	} else if *pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAggregator {
@@ -223,7 +223,11 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		VectorAggregatorReconciliationSourceChannel <- event.GenericEvent{Object: vAggregator}
 	}
 
-	return ctrl.Result{}, pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR)
+	if err := pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Context, req ctrl.Request) (pipeline.Pipeline, error) {

@@ -2839,10 +2839,6 @@ spec:
                   PodSecurityPolicyName - defines name for podSecurityPolicy
                   in case of empty value, prefixedName will be used.
                 type: string
-              ports:
-                items:
-                  type: string
-                type: array
               priorityClassName:
                 description: PriorityClassName assigned to the Pods
                 type: string

@@ -10,11 +10,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"strconv"
 	"strings"
 )
 
 const (
-	k8sEventsAnnotation = "observability.kaasops.io/k8s-events-handler"
+	k8sEventsNamespaceAnnotation = "observability.kaasops.io/k8s-events-namespace"
 )
 
 // ServiceReconciler reconciles a Service object
@@ -34,18 +35,13 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	value, _ := svc.Annotations[k8sEventsAnnotation]
-	if value != "" {
+	if len(svc.Spec.Ports) == 1 {
+		namespace, _ := svc.Annotations[k8sEventsNamespaceAnnotation]
 		host := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
-		list := strings.Split(value, ",")
-		for _, v := range list {
-			rec := strings.Split(v, ":")
-			ns := rec[0]
-			parts := strings.Split(rec[1], "/")
-			r.EventsManager.RegisterSubscriber(host, parts[0], parts[1], ns)
-		}
+		port := strconv.Itoa(int(svc.Spec.Ports[0].Port))
+		protocol := strings.ToLower(string(svc.Spec.Ports[0].Protocol))
+		r.EventsManager.RegisterSubscriber(host, port, protocol, namespace)
 	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -71,6 +67,6 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func hasRequiredAnnotation(obj metav1.Object) bool {
 	annotations := obj.GetAnnotations()
-	_, found := annotations[k8sEventsAnnotation]
+	_, found := annotations[k8sEventsNamespaceAnnotation]
 	return found
 }

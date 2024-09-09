@@ -1,9 +1,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"net"
+	"strconv"
 )
 
 func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
@@ -13,7 +15,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 	cfg.Transforms = make(map[string]*Transform)
 	cfg.Sinks = make(map[string]*Sink)
 
-	cfg.internal.kubernetesEventsListeners = make([]string, 0)
+	cfg.internal.kubernetesEventsListeners = make([]*KubernetesEventsListener, 0)
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
@@ -47,7 +49,16 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 						"address": address,
 					},
 				}
-				cfg.internal.kubernetesEventsListeners = append(cfg.internal.kubernetesEventsListeners, fmt.Sprintf("%s:%s/%s", pipeline.GetNamespace(), port, protocol))
+				portN, err := parsePort(port)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse port %s: %w", port, err)
+				}
+				cfg.internal.kubernetesEventsListeners = append(cfg.internal.kubernetesEventsListeners, &KubernetesEventsListener{
+					Port:      portN,
+					Protocol:  protocol,
+					Namespace: pipeline.GetNamespace(),
+					Name:      k,
+				})
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			cfg.Sources[v.Name] = settings
@@ -78,4 +89,15 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 	}
 
 	return cfg, nil
+}
+
+func parsePort(port string) (int32, error) {
+	p, err := strconv.ParseInt(port, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	if p < 0 || p > 65535 {
+		return 0, errors.New("port out of range")
+	}
+	return int32(p), nil
 }
