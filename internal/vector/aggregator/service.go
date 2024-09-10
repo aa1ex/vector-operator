@@ -46,8 +46,11 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 
 	sourcesPorts := ctrl.Config.GetSourcesPorts()
 	for _, port := range sourcesPorts {
-		if _, ok := m[keyFromServicePort(port)]; !ok {
-			m[keyFromServicePort(port)] = port
+		p := keyFromServicePort(port)
+		if _, ok := m[p]; !ok {
+			m[p] = port
+		} else {
+			return nil, fmt.Errorf("duplicate source port %s", p)
 		}
 	}
 

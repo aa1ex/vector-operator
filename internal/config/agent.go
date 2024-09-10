@@ -59,9 +59,6 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 				v.UseApiServerCache = true
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			if _, ok := cfg.Sources[v.Name]; ok {
-				return nil, fmt.Errorf("duplicate source name %s in pipeline %s", v.Name, pipeline.GetName())
-			}
 			cfg.Sources[v.Name] = v
 		}
 		for k, v := range p.Transforms {
@@ -69,18 +66,12 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
-			if _, ok := cfg.Transforms[v.Name]; ok {
-				return nil, fmt.Errorf("duplicate transform name %s in pipeline %s", v.Name, pipeline.GetName())
-			}
 			cfg.Transforms[v.Name] = v
 		}
 		for k, v := range p.Sinks {
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
-			}
-			if _, ok := cfg.Sinks[v.Name]; ok {
-				return nil, fmt.Errorf("duplicate sink name %s in pipeline %s", v.Name, pipeline.GetName())
 			}
 			cfg.Sinks[v.Name] = v
 		}
