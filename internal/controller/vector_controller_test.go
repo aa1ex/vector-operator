@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -69,8 +70,11 @@ var _ = Describe("Vector Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &VectorReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:             k8sClient,
+				Scheme:             k8sClient.Scheme(),
+				PipelineCheckWG:    wg,
+				Clientset:          clientset,
+				ConfigCheckTimeout: time.Second * 10,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

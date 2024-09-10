@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,9 +44,11 @@ import (
 
 var cfg *rest.Config
 var k8sClient client.Client
+var clientset *kubernetes.Clientset
 var testEnv *envtest.Environment
 var ctx context.Context
 var cancel context.CancelFunc
+var wg = &sync.WaitGroup{}
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -85,6 +89,10 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	clientset, err = kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(clientset).NotTo(BeNil())
 
 })
 

@@ -60,7 +60,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	log := log.FromContext(ctx).WithValues("Pipeline", req.Name)
 	log.Info("start Reconcile Pipeline")
 
-	pipelineCR, err := r.findPipelineCustomResourceInstance(ctx, req)
+	pipelineCR, err := r.getPipeline(ctx, req)
 	if err != nil {
 		log.Error(err, "Failed to get Pipeline")
 		return ctrl.Result{}, err
@@ -116,22 +116,19 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	pipelineVectorRole := pipelineCR.GetRole()
-	if pipelineVectorRole == nil {
-		p := &config.PipelineConfig{}
-		if err := config.UnmarshalJson(pipelineCR.GetSpec(), p); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
-		}
-		pipelineVectorRole, err = p.VectorRole()
-		if err != nil {
-			if err = pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
-				log.Error(err, "Failed to set pipeline status")
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-		pipelineCR.SetRole(pipelineVectorRole)
+	p := &config.PipelineConfig{}
+	if err := config.UnmarshalJson(pipelineCR.GetSpec(), p); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
 	}
+	pipelineVectorRole, err := p.VectorRole()
+	if err != nil {
+		if err = pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
+			log.Error(err, "Failed to set pipeline status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	pipelineCR.SetRole(pipelineVectorRole)
 
 	if *pipelineVectorRole == vectorv1alpha1.VectorPipelineRoleAgent {
 
@@ -230,7 +227,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *PipelineReconciler) findPipelineCustomResourceInstance(ctx context.Context, req ctrl.Request) (pipeline.Pipeline, error) {
+func (r *PipelineReconciler) getPipeline(ctx context.Context, req ctrl.Request) (pipeline.Pipeline, error) {
 	if req.Namespace != "" {
 		vp := &vectorv1alpha1.VectorPipeline{}
 		err := r.Get(ctx, req.NamespacedName, vp)
