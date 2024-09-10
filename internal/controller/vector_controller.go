@@ -161,12 +161,12 @@ func (r *VectorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func listVectorAgents(ctx context.Context, client client.Client) (vectors []*vectorv1alpha1.Vector, err error) {
-	vectorlist := vectorv1alpha1.VectorList{}
-	err = client.List(ctx, &vectorlist)
+	list := vectorv1alpha1.VectorList{}
+	err = client.List(ctx, &list)
 	if err != nil {
 		return nil, err
 	}
-	for _, vector := range vectorlist.Items {
+	for _, vector := range list.Items {
 		vectors = append(vectors, &vector)
 	}
 	return vectors, nil
@@ -190,7 +190,7 @@ func (r *VectorReconciler) reconcileVectors(ctx context.Context, client client.C
 
 func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client client.Client, clientset *kubernetes.Clientset, v *vectorv1alpha1.Vector, configOnly bool) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("Vector", v.Name)
-	// Init Controller for Vector Agent
+
 	vaCtrl := agent.NewController(v, client, clientset)
 
 	// Get Vector Config file
@@ -245,10 +245,6 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	}
 
 	if err := vaCtrl.SetSuccessStatus(ctx, &cfgHash); err != nil {
-		// TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
-		if api_errors.IsConflict(err) {
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, err
 	}
 

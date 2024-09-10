@@ -36,9 +36,9 @@ func (ctrl *Controller) createVectorAgentService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "api",
-					Protocol:   corev1.Protocol("TCP"),
+					Protocol:   corev1.ProtocolTCP,
 					Port:       ApiPort,
-					TargetPort: intstr.FromInt(ApiPort),
+					TargetPort: intstr.FromInt32(ApiPort),
 				},
 			},
 			Selector: labels,

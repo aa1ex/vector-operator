@@ -247,10 +247,6 @@ func (r *VectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx context.
 	}
 
 	if err := vaCtrl.SetSuccessStatus(ctx, &cfgHash); err != nil {
-		// TODO: Handle err: Operation cannot be fulfilled on vectors.observability.kaasops.io \"vector-sample\": the object has been modified; please apply your changes to the latest version and try again
-		if api_errors.IsConflict(err) {
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, err
 	}
 

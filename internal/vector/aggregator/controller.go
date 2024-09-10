@@ -77,7 +77,7 @@ func (ctrl *Controller) DeleteVectorAggregator(ctx context.Context) error {
 	return nil
 }
 
-func (ctrl *Controller) setDefault() { // TODO(aa1ex): webhook defaulter instead?
+func (ctrl *Controller) setDefault() {
 	if ctrl.VectorAggregator.Spec.Image == "" {
 		ctrl.VectorAggregator.Spec.Image = "timberio/vector:0.28.1-distroless-libc"
 	}
