@@ -4,7 +4,6 @@ const (
 	// types
 	AMQPType                  = "amqp"
 	ApacheMetricsType         = "apache_metrics"
-	AWSECSMetricsType         = "aws_ecs_metrics"
 	AWSKinesisFirehoseType    = "aws_kinesis_firehose"
 	AWSS3Type                 = "aws_s3"
 	AWSSQSType                = "aws_sqs"
@@ -13,9 +12,7 @@ const (
 	DNSTapType                = "dnstap"
 	DockerLogsType            = "docker_logs"
 	EventStoreDBMetricsType   = "eventstoredb_metrics"
-	ExecType                  = "exec"
 	FileType                  = "file"
-	FileDescriptorType        = "file_descriptor"
 	FluentType                = "fluent"
 	GCPPubSubType             = "gcp_pubsub"
 	HerokuLogsType            = "heroku_logs"
@@ -41,8 +38,6 @@ const (
 	SocketType                = "socket"
 	SplunkHECType             = "splunk_hec"
 	StatsDType                = "statsd"
-	StdInType                 = "stdin"
-	SyslogType                = "syslog"
 	VectorType                = "vector"
 
 	// custom types
