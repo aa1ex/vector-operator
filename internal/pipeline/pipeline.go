@@ -19,6 +19,7 @@ package pipeline
 import (
 	"context"
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,6 +36,7 @@ type Pipeline interface {
 	UpdateStatus(context.Context, client.Client) error
 	GetRole() *vectorv1alpha1.VectorPipelineRole
 	SetRole(*vectorv1alpha1.VectorPipelineRole)
+	GetTypeMeta() v1.TypeMeta
 }
 
 func GetValidPipelines(ctx context.Context, client client.Client, filterRole vectorv1alpha1.VectorPipelineRole) ([]Pipeline, error) {

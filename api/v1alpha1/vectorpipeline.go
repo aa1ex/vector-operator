@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"context"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,4 +60,8 @@ func (vp *VectorPipeline) GetRole() *VectorPipelineRole {
 
 func (vp *VectorPipeline) SetRole(role *VectorPipelineRole) {
 	vp.Status.Role = role
+}
+
+func (vp *VectorPipeline) GetTypeMeta() metav1.TypeMeta {
+	return vp.TypeMeta
 }

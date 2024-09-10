@@ -58,6 +58,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 					Protocol:  protocol,
 					Namespace: pipeline.GetNamespace(),
 					Name:      k,
+					Pipeline:  pipeline,
 				})
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)

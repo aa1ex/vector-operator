@@ -117,9 +117,10 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 			if _, port, err := net.SplitHostPort(address); err == nil {
 				portN, _ := strconv.Atoi(port)
 				if isValidPort(portN) {
+					protocol := extractProtocol(s.Options)
 					ports = append(ports, corev1.ServicePort{
-						Name:       "port-" + port,
-						Protocol:   extractProtocol(s.Options),
+						Name:       "port-" + port + "-" + strings.ToLower(string(protocol)),
+						Protocol:   protocol,
 						Port:       int32(portN),
 						TargetPort: intstr.FromInt32(int32(portN)),
 					})

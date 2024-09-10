@@ -31,7 +31,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	svc := &corev1.Service{}
 	err := r.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
-		r.EventsManager.UnregisterSubscriber(fmt.Sprintf("%s.%s", svc.Name, svc.Namespace))
+		r.EventsManager.UnregisterSubscriber(fmt.Sprintf("%s.%s", req.Name, req.Namespace))
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 

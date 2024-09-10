@@ -16,6 +16,8 @@ limitations under the License.
 
 package config
 
+import "github.com/kaasops/vector-operator/internal/pipeline"
+
 type VectorConfig struct {
 	DataDir        string   `yaml:"data_dir"`
 	Api            *ApiSpec `yaml:"api"`
@@ -71,6 +73,7 @@ type KubernetesEventsListener struct {
 	Namespace string
 	Port      int32
 	Protocol  string
+	Pipeline  pipeline.Pipeline
 }
 
 type internalConfig struct {

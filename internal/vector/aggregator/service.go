@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
@@ -14,7 +16,10 @@ import (
 func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error {
 	log := log.FromContext(ctx).WithValues("vector-aggregator-service", ctrl.VectorAggregator.Name)
 	log.Info("start Reconcile Vector Aggregator Service")
-	svcs := ctrl.createVectorAggregatorService()
+	svcs, err := ctrl.createVectorAggregatorService()
+	if err != nil {
+		return err
+	}
 	if len(svcs) == 0 {
 		return nil
 	}
@@ -26,7 +31,7 @@ func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error
 	return nil
 }
 
-func (ctrl *Controller) createVectorAggregatorService() []*corev1.Service {
+func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, error) {
 	labels := ctrl.labelsForVectorAggregator()
 	annotations := ctrl.annotationsForVectorAggregator()
 	if annotations == nil {
@@ -39,8 +44,8 @@ func (ctrl *Controller) createVectorAggregatorService() []*corev1.Service {
 
 	m := make(map[string]corev1.ServicePort)
 
-	autoDiscoveredPorts := ctrl.Config.GetSourcesPorts()
-	for _, port := range autoDiscoveredPorts {
+	sourcesPorts := ctrl.Config.GetSourcesPorts()
+	for _, port := range sourcesPorts {
 		if _, ok := m[keyFromServicePort(port)]; !ok {
 			m[keyFromServicePort(port)] = port
 		}
@@ -61,14 +66,27 @@ func (ctrl *Controller) createVectorAggregatorService() []*corev1.Service {
 			Name:       l.Name,
 			TargetPort: intstr.FromInt32(l.Port),
 		}
+		// TODO(aa1ex): refactor
+		objectMeta := ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace)
+		objectMeta.OwnerReferences = []metav1.OwnerReference{
+			{
+				APIVersion:         l.Pipeline.GetTypeMeta().APIVersion,
+				Kind:               l.Pipeline.GetTypeMeta().Kind,
+				Name:               l.Pipeline.GetName(),
+				UID:                l.Pipeline.GetUID(),
+				BlockOwnerDeletion: ptr.To(true),
+				Controller:         ptr.To(true),
+			},
+		}
+		objectMeta.Namespace = l.Pipeline.GetNamespace()
 		svc := &corev1.Service{
-			ObjectMeta: ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace),
+			ObjectMeta: objectMeta,
 			Spec: corev1.ServiceSpec{
 				Ports:    []corev1.ServicePort{sp},
 				Selector: labels,
 			},
 		}
-		svc.ObjectMeta.Name += "-" + l.Namespace + "-" + l.Name
+		svc.ObjectMeta.Name += "-" + l.Pipeline.GetName() + "-" + l.Namespace + "-" + l.Name
 		svcs = append(svcs, svc)
 		delete(m, keyFromServicePort(sp))
 	}
@@ -81,7 +99,7 @@ func (ctrl *Controller) createVectorAggregatorService() []*corev1.Service {
 	if ctrl.VectorAggregator.Spec.Api.Enabled {
 		ports = append(ports, corev1.ServicePort{
 			Name:       "api",
-			Protocol:   "TCP",
+			Protocol:   corev1.ProtocolTCP,
 			Port:       ApiPort,
 			TargetPort: intstr.FromInt32(ApiPort),
 		})
@@ -95,5 +113,5 @@ func (ctrl *Controller) createVectorAggregatorService() []*corev1.Service {
 		},
 	})
 
-	return svcs
+	return svcs, nil
 }
