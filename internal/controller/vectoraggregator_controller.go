@@ -150,10 +150,6 @@ func (r *VectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	clusterObjectsPredicates := builder.WithPredicates(predicate.Funcs{
-		CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool { return false },
-	})
-
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&observabilityv1alpha1.VectorAggregator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		WatchesRawSource(source.Channel(VectorAggregatorReconciliationSourceChannel, &handler.EnqueueRequestForObject{})).
@@ -161,8 +157,8 @@ func (r *VectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ServiceAccount{}).
-		Owns(&rbacv1.ClusterRole{}, clusterObjectsPredicates).
-		Owns(&rbacv1.ClusterRoleBinding{}, clusterObjectsPredicates)
+		Owns(&rbacv1.ClusterRole{}).
+		Owns(&rbacv1.ClusterRoleBinding{})
 
 	if monitoringCRD {
 		builder.Owns(&monitorv1.PodMonitor{})
