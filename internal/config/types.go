@@ -16,7 +16,11 @@ limitations under the License.
 
 package config
 
-import "github.com/kaasops/vector-operator/internal/pipeline"
+import (
+	"fmt"
+	"github.com/kaasops/vector-operator/internal/pipeline"
+	corev1 "k8s.io/api/core/v1"
+)
 
 type VectorConfig struct {
 	DataDir        string   `yaml:"data_dir"`
@@ -68,14 +72,25 @@ type pipelineConfig_ struct {
 	Sinks      map[string]interface{}
 }
 
-type KubernetesEventsListener struct {
-	Name      string
-	Namespace string
-	Port      int32
-	Protocol  string
-	Pipeline  pipeline.Pipeline
+type ServicePort struct {
+	IsForKubernetesEvent bool
+	Name                 string
+	Namespace            string
+	Port                 int32
+	Protocol             corev1.Protocol
+	Pipeline             pipeline.Pipeline
 }
 
 type internalConfig struct {
-	kubernetesEventsListeners []*KubernetesEventsListener
+	servicePort map[string]*ServicePort
+}
+
+func (c *internalConfig) addServicePort(port *ServicePort) error {
+	key := fmt.Sprintf("%d/%s", port.Port, port.Protocol)
+	if v, ok := c.servicePort[key]; !ok {
+		c.servicePort[key] = port
+	} else {
+		return fmt.Errorf("duplicate port %s in %s and %s", key, v.Pipeline.GetName(), port.Pipeline.GetName())
+	}
+	return nil
 }

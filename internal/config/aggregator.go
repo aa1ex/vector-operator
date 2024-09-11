@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/pipeline"
+	corev1 "k8s.io/api/core/v1"
 	"net"
 	"strconv"
+	"strings"
 )
 
 func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
@@ -15,7 +17,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 	cfg.Transforms = make(map[string]*Transform)
 	cfg.Sinks = make(map[string]*Sink)
 
-	cfg.internal.kubernetesEventsListeners = make([]*KubernetesEventsListener, 0)
+	cfg.internal.servicePort = make(map[string]*ServicePort)
 
 	for _, pipeline := range pipelines {
 		p := &PipelineConfig{}
@@ -23,44 +25,75 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
 		for k, v := range p.Sources {
-			// TODO(aa1ex): validate source type
 			settings := v
-			if v.Type == kubernetesEventsType {
-				address := v.Options["address"].(string)
-				if address == "" {
-					return nil, fmt.Errorf("address is empty from %s", pipeline.GetName())
+
+			switch v.Type {
+			case kubernetesEventsType:
+				{
+					address := v.Options["address"].(string)
+					if address == "" {
+						return nil, fmt.Errorf("address is empty from %s", pipeline.GetName())
+					}
+					protocol, _ := v.Options["mode"].(string)
+					if protocol == "" {
+						protocol = "tcp"
+					}
+					if protocol != "tcp" && protocol != "udp" {
+						return nil, fmt.Errorf("unsupported mode '%s' for %s pipeline", v.Options["mode"], pipeline.GetName())
+					}
+					_, port, err := net.SplitHostPort(address)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse address %s: %w", address, err)
+					}
+					settings = &Source{
+						Name: k,
+						Type: SocketType,
+						Options: map[string]any{
+							"mode":    protocol,
+							"address": address,
+						},
+					}
+					portN, err := parsePort(port)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse port %s: %w", port, err)
+					}
+					err = cfg.internal.addServicePort(&ServicePort{
+						IsForKubernetesEvent: true,
+						Port:                 portN,
+						Protocol:             corev1.Protocol(strings.ToUpper(protocol)),
+						Namespace:            pipeline.GetNamespace(),
+						Name:                 k,
+						Pipeline:             pipeline,
+					})
+					if err != nil {
+						return nil, err
+					}
 				}
-				protocol, _ := v.Options["mode"].(string)
-				if protocol == "" {
-					protocol = "tcp"
+			default:
+				{
+					if val, ok := v.Options["address"]; ok {
+						address, _ := val.(string)
+						if _, port, err := net.SplitHostPort(address); err == nil {
+							portN, err := parsePort(port)
+							if err != nil {
+								return nil, fmt.Errorf("failed to parse port %s: %w", port, err)
+							}
+							protocol := extractProtocol(v.Options)
+							err = cfg.internal.addServicePort(&ServicePort{
+								Port:      portN,
+								Protocol:  protocol,
+								Namespace: pipeline.GetNamespace(),
+								Name:      k,
+								Pipeline:  pipeline,
+							})
+							if err != nil {
+								return nil, err
+							}
+						}
+					}
 				}
-				if protocol != "tcp" && protocol != "udp" {
-					return nil, fmt.Errorf("unsupported mode '%s' for %s pipeline", v.Options["mode"], pipeline.GetName())
-				}
-				_, port, err := net.SplitHostPort(address)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse address %s: %w", address, err)
-				}
-				settings = &Source{
-					Name: k,
-					Type: SocketType,
-					Options: map[string]any{
-						"mode":    protocol,
-						"address": address,
-					},
-				}
-				portN, err := parsePort(port)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse port %s: %w", port, err)
-				}
-				cfg.internal.kubernetesEventsListeners = append(cfg.internal.kubernetesEventsListeners, &KubernetesEventsListener{
-					Port:      portN,
-					Protocol:  protocol,
-					Namespace: pipeline.GetNamespace(),
-					Name:      k,
-					Pipeline:  pipeline,
-				})
 			}
+
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
 			cfg.Sources[v.Name] = settings
 		}
@@ -89,6 +122,8 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 		cfg.PipelineConfig = defaultAggregatorPipelineConfig
 	}
 
+	// TODO: services
+
 	return cfg, nil
 }
 
@@ -101,4 +136,14 @@ func parsePort(port string) (int32, error) {
 		return 0, errors.New("port out of range")
 	}
 	return int32(p), nil
+}
+
+func extractProtocol(opts map[string]any) corev1.Protocol {
+	protocol := corev1.ProtocolTCP
+	if val, ok := opts["mode"]; ok {
+		if s, ok := val.(string); ok && strings.ToLower(s) == "udp" {
+			return corev1.ProtocolUDP
+		}
+	}
+	return protocol
 }

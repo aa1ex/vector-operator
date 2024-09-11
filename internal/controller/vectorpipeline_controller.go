@@ -22,6 +22,7 @@ import (
 	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/kaasops/vector-operator/internal/vector/aggregator"
 	"golang.org/x/sync/errgroup"
+	v1 "k8s.io/api/core/v1"
 	"sync"
 	"time"
 
@@ -213,15 +214,15 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	log.Info("finish Reconcile Pipeline")
 
+	if err := pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	for _, vAgent := range vectorAgents {
 		VectorAgentReconciliationSourceChannel <- event.GenericEvent{Object: vAgent}
 	}
 	for _, vAggregator := range vectorAggregators {
 		VectorAggregatorReconciliationSourceChannel <- event.GenericEvent{Object: vAggregator}
-	}
-
-	if err := pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR); err != nil {
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -249,6 +250,7 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vectorv1alpha1.VectorPipeline{}).
 		Watches(&vectorv1alpha1.ClusterVectorPipeline{}, &handler.EnqueueRequestForObject{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Owns(&v1.Service{}).
 		Complete(r)
 }
 

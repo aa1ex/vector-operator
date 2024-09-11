@@ -2,7 +2,6 @@ package aggregator
 
 import (
 	"context"
-	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +9,6 @@ import (
 	"k8s.io/utils/ptr"
 	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 )
 
 func (ctrl *Controller) ensureVectorAggregatorService(ctx context.Context) error {
@@ -38,33 +36,18 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 		annotations = make(map[string]string)
 	}
 
-	keyFromServicePort := func(servicePort corev1.ServicePort) string {
-		return fmt.Sprintf("%s/%s", servicePort.TargetPort.String(), servicePort.Protocol)
-	}
+	servicesPorts := ctrl.Config.GetSourcesServicePorts()
+	svcs := make([]*corev1.Service, 0, len(servicesPorts)+1)
 
-	m := make(map[string]corev1.ServicePort)
-
-	sourcesPorts := ctrl.Config.GetSourcesPorts()
-	for _, port := range sourcesPorts {
-		p := keyFromServicePort(port)
-		if _, ok := m[p]; !ok {
-			m[p] = port
-		} else {
-			return nil, fmt.Errorf("duplicate source port %s", p)
-		}
-	}
-
-	k8sEvSvcPorts := ctrl.Config.GetKubernetesEventsServicesPorts()
-
-	svcs := make([]*corev1.Service, 0, len(k8sEvSvcPorts)+1)
-
-	for _, l := range k8sEvSvcPorts {
+	for _, l := range servicesPorts {
 		ann := make(map[string]string, len(annotations))
 		maps.Copy(ann, annotations)
-		ann["observability.kaasops.io/k8s-events-namespace"] = l.Namespace
+		if l.IsForKubernetesEvent {
+			ann["observability.kaasops.io/k8s-events-namespace"] = l.Namespace
+		}
 
 		sp := corev1.ServicePort{
-			Protocol:   corev1.Protocol(strings.ToUpper(l.Protocol)),
+			Protocol:   l.Protocol,
 			Port:       l.Port,
 			Name:       l.Name,
 			TargetPort: intstr.FromInt32(l.Port),
@@ -91,30 +74,24 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 		}
 		svc.ObjectMeta.Name += "-" + l.Pipeline.GetName() + "-" + l.Namespace + "-" + l.Name
 		svcs = append(svcs, svc)
-		delete(m, keyFromServicePort(sp))
-	}
-
-	ports := make([]corev1.ServicePort, 0, len(m))
-	for _, port := range m {
-		ports = append(ports, port)
 	}
 
 	if ctrl.VectorAggregator.Spec.Api.Enabled {
-		ports = append(ports, corev1.ServicePort{
-			Name:       "api",
-			Protocol:   corev1.ProtocolTCP,
-			Port:       ApiPort,
-			TargetPort: intstr.FromInt32(ApiPort),
+		svcs = append(svcs, &corev1.Service{
+			ObjectMeta: ctrl.objectMetaVectorAggregator(labels, annotations, ctrl.VectorAggregator.Namespace),
+			Spec: corev1.ServiceSpec{
+				Ports: []corev1.ServicePort{
+					{
+						Name:       "api",
+						Protocol:   corev1.ProtocolTCP,
+						Port:       ApiPort,
+						TargetPort: intstr.FromInt32(ApiPort),
+					},
+				},
+				Selector: labels,
+			},
 		})
 	}
-
-	svcs = append(svcs, &corev1.Service{
-		ObjectMeta: ctrl.objectMetaVectorAggregator(labels, annotations, ctrl.VectorAggregator.Namespace),
-		Spec: corev1.ServiceSpec{
-			Ports:    ports,
-			Selector: labels,
-		},
-	})
 
 	return svcs, nil
 }

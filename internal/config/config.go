@@ -20,17 +20,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v2"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"net"
-	goyaml "sigs.k8s.io/yaml"
-	"strconv"
-	"strings"
-
 	vectorv1alpha1 "github.com/kaasops/vector-operator/api/v1alpha1"
 	"github.com/kaasops/vector-operator/internal/vector/agent"
 	"github.com/mitchellh/mapstructure"
+	"gopkg.in/yaml.v2"
+	"net"
+	goyaml "sigs.k8s.io/yaml"
+	"strconv"
 )
 
 var (
@@ -109,28 +105,6 @@ func (c *VectorConfig) MarshalJSON() ([]byte, error) {
 	return jsonByte, nil
 }
 
-func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
-	var ports []corev1.ServicePort
-	for _, s := range c.Sources {
-		if val, ok := s.Options["address"]; ok {
-			address, _ := val.(string)
-			if _, port, err := net.SplitHostPort(address); err == nil {
-				portN, _ := strconv.Atoi(port)
-				if isValidPort(portN) {
-					protocol := extractProtocol(s.Options)
-					ports = append(ports, corev1.ServicePort{
-						Name:       s.Type + "-" + strings.ToLower(s.Name),
-						Protocol:   protocol,
-						Port:       int32(portN),
-						TargetPort: intstr.FromInt32(int32(portN)),
-					})
-				}
-			}
-		}
-	}
-	return ports
-}
-
 func (c *PipelineConfig) VectorRole() (*vectorv1alpha1.VectorPipelineRole, error) {
 	if len(c.Sources) == 0 {
 		return nil, fmt.Errorf("sources list is empty")
@@ -159,23 +133,10 @@ func (c *PipelineConfig) VectorRole() (*vectorv1alpha1.VectorPipelineRole, error
 	return nil, fmt.Errorf("unknown vector role")
 }
 
-func (c *VectorConfig) GetKubernetesEventsServicesPorts() []*KubernetesEventsListener {
-	return c.internal.kubernetesEventsListeners
-}
-
-func isValidPort(portN int) bool {
-	if portN < 0 || portN > 65535 {
-		return false
+func (c *VectorConfig) GetSourcesServicePorts() []*ServicePort {
+	list := make([]*ServicePort, 0, len(c.internal.servicePort))
+	for _, s := range c.internal.servicePort {
+		list = append(list, s)
 	}
-	return true
-}
-
-func extractProtocol(opts map[string]any) corev1.Protocol {
-	protocol := corev1.ProtocolTCP
-	if val, ok := opts["mode"]; ok {
-		if s, ok := val.(string); ok && strings.ToLower(s) == "udp" {
-			return corev1.ProtocolUDP
-		}
-	}
-	return protocol
+	return list
 }
