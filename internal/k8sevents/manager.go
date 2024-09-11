@@ -5,7 +5,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"net"
-	"strings"
 	"sync"
 	"time"
 )
@@ -14,41 +13,37 @@ type EventsManager struct {
 	client rest.Interface
 	logger Logger
 	mx     sync.Mutex
-	mp     map[string]*client
+	mp     map[string]*watcher
 }
 
 func NewEventsManager(clientset *kubernetes.Clientset, logger Logger) *EventsManager {
 	return &EventsManager{
-		mp:     make(map[string]*client),
+		mp:     make(map[string]*watcher),
 		client: clientset.CoreV1().RESTClient(),
 		logger: logger,
 	}
 }
 
-func (m *EventsManager) RegisterSubscriber(host, port, protocol, namespace string) {
-	key := host + ":" + namespace + ":" + port + ":" + protocol // TODO(aa1ex): key?
-
+func (m *EventsManager) RegisterSubscriber(id, host, port, protocol, namespace string) {
 	addr := net.JoinHostPort(host, port)
-	c := newClient(protocol, addr, m.logger)
+	c := newWatcher(protocol, addr, m.logger)
 
 	m.mx.Lock()
-	if oldC, ok := m.mp[key]; ok {
+	if oldC, ok := m.mp[id]; ok {
 		oldC.close()
 	}
-	m.mp[key] = c
+	m.mp[id] = c
 	m.mx.Unlock()
 
 	c.watchEvents(m.client, namespace)
 }
 
-func (m *EventsManager) UnregisterSubscriber(host string) {
+func (m *EventsManager) UnregisterSubscriber(id string) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	for key, c := range m.mp {
-		if strings.HasPrefix(key, host+":") {
-			c.close()
-			delete(m.mp, key)
-		}
+	if v, ok := m.mp[id]; ok {
+		v.close()
+		delete(m.mp, id)
 	}
 }
 

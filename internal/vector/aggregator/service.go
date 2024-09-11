@@ -4,9 +4,7 @@ import (
 	"context"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"maps"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -54,17 +52,17 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 		}
 		// TODO(aa1ex): refactor
 		objectMeta := ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace)
-		objectMeta.OwnerReferences = []metav1.OwnerReference{
-			{
-				APIVersion:         l.Pipeline.GetTypeMeta().APIVersion,
-				Kind:               l.Pipeline.GetTypeMeta().Kind,
-				Name:               l.Pipeline.GetName(),
-				UID:                l.Pipeline.GetUID(),
-				BlockOwnerDeletion: ptr.To(true),
-				Controller:         ptr.To(true),
-			},
-		}
-		objectMeta.Namespace = l.Pipeline.GetNamespace()
+		//objectMeta.OwnerReferences = []metav1.OwnerReference{
+		//	{
+		//		APIVersion:         l.Pipeline.GetTypeMeta().APIVersion,
+		//		Kind:               l.Pipeline.GetTypeMeta().Kind,
+		//		Name:               l.Pipeline.GetName(),
+		//		UID:                l.Pipeline.GetUID(),
+		//		BlockOwnerDeletion: ptr.To(true),
+		//		Controller:         ptr.To(true),
+		//	},
+		//}
+		//objectMeta.Namespace = l.Pipeline.GetNamespace()
 		svc := &corev1.Service{
 			ObjectMeta: objectMeta,
 			Spec: corev1.ServiceSpec{

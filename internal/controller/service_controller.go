@@ -31,7 +31,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	svc := &corev1.Service{}
 	err := r.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
-		r.EventsManager.UnregisterSubscriber(fmt.Sprintf("%s.%s", req.Name, req.Namespace))
+		r.EventsManager.UnregisterSubscriber(req.NamespacedName.String())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -40,7 +40,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		host := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
 		port := strconv.Itoa(int(svc.Spec.Ports[0].Port))
 		protocol := strings.ToLower(string(svc.Spec.Ports[0].Protocol))
-		r.EventsManager.RegisterSubscriber(host, port, protocol, namespace)
+		r.EventsManager.RegisterSubscriber(req.NamespacedName.String(), host, port, protocol, namespace)
 	}
 	return ctrl.Result{}, nil
 }
