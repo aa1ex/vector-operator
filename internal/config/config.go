@@ -119,7 +119,7 @@ func (c *PipelineConfig) GetSourcesPorts() []corev1.ServicePort {
 				if isValidPort(portN) {
 					protocol := extractProtocol(s.Options)
 					ports = append(ports, corev1.ServicePort{
-						Name:       "port-" + port + "-" + strings.ToLower(string(protocol)),
+						Name:       s.Type + "-" + s.Name,
 						Protocol:   protocol,
 						Port:       int32(portN),
 						TargetPort: intstr.FromInt32(int32(portN)),
