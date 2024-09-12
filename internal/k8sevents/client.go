@@ -70,7 +70,7 @@ func (w *watcher) watchEvents(client rest.Interface, namespace string) {
 				if !sending {
 					select {
 					case event = <-eventsCh:
-						if eventTimestamp(event).Before(w.createdAt) {
+						if eventTimestamp(event).Before(w.createdAt) || event == nil {
 							continue
 						}
 						sending = true
@@ -97,8 +97,10 @@ func (w *watcher) watchEvents(client rest.Interface, namespace string) {
 				data, err := json.Marshal(event)
 				if err != nil {
 					w.logger.Error(err, "marshal event", "event", event)
-					return
+					sending = false
+					continue
 				}
+
 				_, err = conn.Write(append(data, []byte("\n")...))
 				if err != nil {
 					w.logger.Error(err, "send event", "address", w.addr)
