@@ -35,47 +35,35 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 	}
 
 	servicesPorts := ctrl.Config.GetSourcesServicePorts()
-	svcs := make([]*corev1.Service, 0, len(servicesPorts)+1)
+	svcList := make([]*corev1.Service, 0, len(servicesPorts)+1)
 
-	for _, l := range servicesPorts {
+	for _, sp := range servicesPorts {
 		ann := make(map[string]string, len(annotations))
 		maps.Copy(ann, annotations)
-		if l.IsForKubernetesEvent {
-			ann["observability.kaasops.io/k8s-events-namespace"] = l.Namespace
+		if sp.IsForKubernetesEvent {
+			ann["observability.kaasops.io/k8s-events-namespace"] = sp.Namespace
 		}
 
-		sp := corev1.ServicePort{
-			Protocol:   l.Protocol,
-			Port:       l.Port,
-			Name:       l.Name,
-			TargetPort: intstr.FromInt32(l.Port),
-		}
-		// TODO(aa1ex): refactor
-		objectMeta := ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace)
-		//objectMeta.OwnerReferences = []metav1.OwnerReference{
-		//	{
-		//		APIVersion:         l.Pipeline.GetTypeMeta().APIVersion,
-		//		Kind:               l.Pipeline.GetTypeMeta().Kind,
-		//		Name:               l.Pipeline.GetName(),
-		//		UID:                l.Pipeline.GetUID(),
-		//		BlockOwnerDeletion: ptr.To(true),
-		//		Controller:         ptr.To(true),
-		//	},
-		//}
-		//objectMeta.Namespace = l.Pipeline.GetNamespace()
 		svc := &corev1.Service{
-			ObjectMeta: objectMeta,
+			ObjectMeta: ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace),
 			Spec: corev1.ServiceSpec{
-				Ports:    []corev1.ServicePort{sp},
+				Ports: []corev1.ServicePort{
+					{
+						Protocol:   sp.Protocol,
+						Port:       sp.Port,
+						Name:       sp.Name,
+						TargetPort: intstr.FromInt32(sp.Port),
+					},
+				},
 				Selector: labels,
 			},
 		}
-		svc.ObjectMeta.Name += "-" + l.Pipeline.GetName() + "-" + l.Namespace + "-" + l.Name
-		svcs = append(svcs, svc)
+		svc.ObjectMeta.Name += "-" + sp.Pipeline.GetName() + "-" + sp.Namespace + "-" + sp.Name
+		svcList = append(svcList, svc)
 	}
 
 	if ctrl.VectorAggregator.Spec.Api.Enabled {
-		svcs = append(svcs, &corev1.Service{
+		svcList = append(svcList, &corev1.Service{
 			ObjectMeta: ctrl.objectMetaVectorAggregator(labels, annotations, ctrl.VectorAggregator.Namespace),
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{
@@ -91,5 +79,5 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 		})
 	}
 
-	return svcs, nil
+	return svcList, nil
 }
