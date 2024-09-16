@@ -58,12 +58,12 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 						return nil, fmt.Errorf("failed to parse port %s: %w", port, err)
 					}
 					err = cfg.internal.addServicePort(&ServicePort{
-						IsForKubernetesEvent: true,
-						Port:                 portN,
-						Protocol:             corev1.Protocol(strings.ToUpper(protocol)),
-						Namespace:            pipeline.GetNamespace(),
-						Name:                 k,
-						Pipeline:             pipeline,
+						IsKubernetesEvents: true,
+						Port:               portN,
+						Protocol:           corev1.Protocol(strings.ToUpper(protocol)),
+						Namespace:          pipeline.GetNamespace(),
+						SourceName:         k,
+						PipelineName:       pipeline.GetName(),
 					})
 					if err != nil {
 						return nil, err
@@ -80,11 +80,11 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 							}
 							protocol := extractProtocol(v.Options)
 							err = cfg.internal.addServicePort(&ServicePort{
-								Port:      portN,
-								Protocol:  protocol,
-								Namespace: pipeline.GetNamespace(),
-								Name:      k,
-								Pipeline:  pipeline,
+								Port:         portN,
+								Protocol:     protocol,
+								Namespace:    pipeline.GetNamespace(),
+								SourceName:   k,
+								PipelineName: pipeline.GetName(),
 							})
 							if err != nil {
 								return nil, err
@@ -120,9 +120,17 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 	}
 	if len(cfg.Sources) == 0 && len(cfg.Sinks) == 0 {
 		cfg.PipelineConfig = defaultAggregatorPipelineConfig
+		err := cfg.internal.addServicePort(&ServicePort{
+			Port:         DefaultAggregatorSourcePort,
+			Protocol:     corev1.ProtocolTCP,
+			Namespace:    DefaultNamespace,
+			SourceName:   DefaultInternalMetricsSourceName,
+			PipelineName: DefaultPipelineName,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	// TODO: services
 
 	return cfg, nil
 }

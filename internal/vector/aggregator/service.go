@@ -40,7 +40,7 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 	for _, sp := range servicesPorts {
 		ann := make(map[string]string, len(annotations))
 		maps.Copy(ann, annotations)
-		if sp.IsForKubernetesEvent {
+		if sp.IsKubernetesEvents {
 			ann["observability.kaasops.io/k8s-events-namespace"] = sp.Namespace
 		}
 
@@ -51,14 +51,14 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 					{
 						Protocol:   sp.Protocol,
 						Port:       sp.Port,
-						Name:       sp.Name,
+						Name:       sp.SourceName,
 						TargetPort: intstr.FromInt32(sp.Port),
 					},
 				},
 				Selector: labels,
 			},
 		}
-		svc.ObjectMeta.Name += "-" + sp.Pipeline.GetName() + "-" + sp.Namespace + "-" + sp.Name
+		svc.ObjectMeta.Name += "-" + sp.PipelineName + "-" + sp.Namespace + "-" + sp.SourceName
 		svcList = append(svcList, svc)
 	}
 

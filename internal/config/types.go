@@ -18,7 +18,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/kaasops/vector-operator/internal/pipeline"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -73,12 +72,12 @@ type pipelineConfig_ struct {
 }
 
 type ServicePort struct {
-	IsForKubernetesEvent bool
-	Name                 string
-	Namespace            string
-	Port                 int32
-	Protocol             corev1.Protocol
-	Pipeline             pipeline.Pipeline
+	IsKubernetesEvents bool
+	SourceName         string
+	Namespace          string
+	Port               int32
+	Protocol           corev1.Protocol
+	PipelineName       string
 }
 
 type internalConfig struct {
@@ -90,7 +89,7 @@ func (c *internalConfig) addServicePort(port *ServicePort) error {
 	if v, ok := c.servicePort[key]; !ok {
 		c.servicePort[key] = port
 	} else {
-		return fmt.Errorf("duplicate port %s in %s and %s", key, v.Pipeline.GetName(), port.Pipeline.GetName())
+		return fmt.Errorf("duplicate port %s in %s and %s", key, v.PipelineName, port.PipelineName)
 	}
 	return nil
 }

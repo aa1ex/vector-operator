@@ -1,5 +1,7 @@
 package config
 
+import "fmt"
+
 const (
 	// types
 	BlackholeSinkType      = "blackhole"
@@ -10,6 +12,9 @@ const (
 	DefaultSinkName                  = "defaultSink"
 	DefaultInternalMetricsSourceName = "internalMetricsSource"
 	DefaultInternalMetricsSinkName   = "internalMetricsSink"
+	DefaultAggregatorSourcePort      = 8989
+	DefaultNamespace                 = "default"
+	DefaultPipelineName              = "defaultPipeline"
 )
 
 var (
@@ -21,7 +26,7 @@ var (
 		Name: DefaultSourceName,
 		Type: VectorType,
 		Options: map[string]any{
-			"address": "0.0.0.0:8989",
+			"address": fmt.Sprintf("0.0.0.0:%d", DefaultAggregatorSourcePort),
 		},
 	}
 	defaultSink = &Sink{
