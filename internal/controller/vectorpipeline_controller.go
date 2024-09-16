@@ -249,7 +249,6 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&vectorv1alpha1.VectorPipeline{}).
 		Watches(&vectorv1alpha1.ClusterVectorPipeline{}, &handler.EnqueueRequestForObject{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		//Owns(&v1.Service{}).
 		Complete(r)
 }
 
