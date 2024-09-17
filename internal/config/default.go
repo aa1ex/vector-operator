@@ -14,7 +14,7 @@ const (
 	DefaultInternalMetricsSinkName   = "internalMetricsSink"
 	DefaultAggregatorSourcePort      = 8989
 	DefaultNamespace                 = "default"
-	DefaultPipelineName              = "defaultPipeline"
+	DefaultPipelineName              = "default-pipeline"
 )
 
 var (

@@ -133,10 +133,10 @@ func (c *PipelineConfig) VectorRole() (*vectorv1alpha1.VectorPipelineRole, error
 	return nil, fmt.Errorf("unknown vector role")
 }
 
-func (c *VectorConfig) GetSourcesServicePorts() []*ServicePort {
-	list := make([]*ServicePort, 0, len(c.internal.servicePort))
+func (c *VectorConfig) GetSourcesServicePorts() map[string][]*ServicePort {
+	m := make(map[string][]*ServicePort)
 	for _, s := range c.internal.servicePort {
-		list = append(list, s)
+		m[s.PipelineName] = append(m[s.PipelineName], s)
 	}
-	return list
+	return m
 }

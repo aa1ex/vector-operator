@@ -2,7 +2,9 @@ package aggregator
 
 import (
 	"context"
+	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
+	"github.com/stoewer/go-strcase"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"maps"
@@ -34,31 +36,32 @@ func (ctrl *Controller) createVectorAggregatorService() ([]*corev1.Service, erro
 		annotations = make(map[string]string)
 	}
 
-	servicesPorts := ctrl.Config.GetSourcesServicePorts()
-	svcList := make([]*corev1.Service, 0, len(servicesPorts)+1)
+	svcList := make([]*corev1.Service, 0)
 
-	for _, sp := range servicesPorts {
+	for pipelineName, list := range ctrl.Config.GetSourcesServicePorts() {
 		ann := make(map[string]string, len(annotations))
 		maps.Copy(ann, annotations)
-		if sp.IsKubernetesEvents {
-			ann["observability.kaasops.io/k8s-events-namespace"] = sp.Namespace
-		}
 
+		ports := make([]corev1.ServicePort, 0, len(list))
+		for _, sp := range list {
+			if sp.IsKubernetesEvents {
+				ann["observability.kaasops.io/k8s-events-namespace"] = sp.Namespace
+			}
+			ports = append(ports, corev1.ServicePort{
+				Name:       strcase.KebabCase(sp.SourceName),
+				Protocol:   sp.Protocol,
+				Port:       sp.Port,
+				TargetPort: intstr.FromInt32(sp.Port),
+			})
+		}
 		svc := &corev1.Service{
 			ObjectMeta: ctrl.objectMetaVectorAggregator(labels, ann, ctrl.VectorAggregator.Namespace),
 			Spec: corev1.ServiceSpec{
-				Ports: []corev1.ServicePort{
-					{
-						Protocol:   sp.Protocol,
-						Port:       sp.Port,
-						Name:       sp.SourceName,
-						TargetPort: intstr.FromInt32(sp.Port),
-					},
-				},
+				Ports:    ports,
 				Selector: labels,
 			},
 		}
-		svc.ObjectMeta.Name += "-" + sp.PipelineName + "-" + sp.Namespace + "-" + sp.SourceName
+		svc.ObjectMeta.Name = strcase.KebabCase(fmt.Sprintf("%s-%s", svc.ObjectMeta.Name, pipelineName))
 		svcList = append(svcList, svc)
 	}
 
