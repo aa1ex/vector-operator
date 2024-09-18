@@ -36,4 +36,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ github.repository }}:${{ steps.tag.outputs.TAG }},${{ github.repository }}:latest
+          tags: ${{ secrets.DOCKERHUB_REPOSITORY || github.repository }}:${{ steps.tag.outputs.TAG }},${{ secrets.DOCKERHUB_REPOSITORY || github.repository }}:latest
