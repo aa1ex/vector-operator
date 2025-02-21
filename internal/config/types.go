@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
-
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -37,6 +36,7 @@ type VectorConfig struct {
 }
 
 type PipelineConfig struct {
+	Secret     map[string]any        `yaml:"secret,omitempty"`
 	Sources    map[string]*Source    `yaml:"sources"`
 	Transforms map[string]*Transform `yaml:"transforms"`
 	Sinks      map[string]*Sink      `yaml:"sinks"`
@@ -77,6 +77,7 @@ type pipelineConfig_ struct {
 	Sources    map[string]interface{}
 	Transforms map[string]interface{}
 	Sinks      map[string]interface{}
+	Secret     map[string]interface{}
 }
 
 type ServicePort struct {
@@ -90,7 +91,13 @@ type ServicePort struct {
 }
 
 type internalConfig struct {
-	servicePort map[string]*ServicePort
+	servicePort  map[string]*ServicePort
+	mountSecrets []struct {
+		Pipeline  string
+		Namespace string
+		Name      string
+		Path      string
+	}
 }
 
 func (c *internalConfig) addServicePort(port *ServicePort) error {

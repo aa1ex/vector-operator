@@ -44,10 +44,6 @@ type VectorConfigParams struct {
 }
 
 func newVectorConfig(p VectorConfigParams) *VectorConfig {
-	sources := make(map[string]*Source)
-	transforms := make(map[string]*Transform)
-	sinks := make(map[string]*Sink)
-
 	api := &ApiSpec{
 		Address:    net.JoinHostPort("0.0.0.0", strconv.Itoa(AgentApiPort)),
 		Enabled:    p.ApiEnabled,
@@ -58,9 +54,10 @@ func newVectorConfig(p VectorConfigParams) *VectorConfig {
 		DataDir: "/vector-data-dir",
 		Api:     api,
 		PipelineConfig: PipelineConfig{
-			Sources:    sources,
-			Transforms: transforms,
-			Sinks:      sinks,
+			Secret:     make(map[string]any),
+			Sources:    make(map[string]*Source),
+			Transforms: make(map[string]*Transform),
+			Sinks:      make(map[string]*Sink),
 		},
 		globalOptions: globalOptions{
 			ExpireMetricsSecs: p.ExpireMetricsSecs,
@@ -84,6 +81,9 @@ func UnmarshalJson(spec vectorv1alpha1.VectorPipelineSpec, p *PipelineConfig) er
 		return err
 	}
 	if err := mapstructure.Decode(pipeline_.Sinks, &p.Sinks); err != nil {
+		return err
+	}
+	if err := mapstructure.Decode(pipeline_.Secret, &p.Secret); err != nil {
 		return err
 	}
 	return nil

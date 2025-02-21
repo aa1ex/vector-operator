@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/labels"
 	goyaml "sigs.k8s.io/yaml"
+	"strings"
 )
 
 const (
@@ -38,6 +39,17 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
+		secretBackends := make(map[string]string, len(p.Secret))
+		if len(p.Secret) > 0 {
+			for backendName, backendConf := range p.Secret {
+				prefBackendName := addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName)
+				secretBackends[backendName] = prefBackendName
+				if d, ok := backendConf.(map[string]any); ok {
+					fmt.Println(d["type"])
+				}
+				cfg.Secret[prefBackendName] = backendConf
+			}
+		}
 		for k, v := range p.Sources {
 			// Validate source
 			if _, ok := pipeline.(*vectorv1alpha1.VectorPipeline); ok {
@@ -63,6 +75,7 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 				v.UseApiServerCache = true
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
+			secretAddPrefix(v.Options, secretBackends)
 			cfg.Sources[v.Name] = v
 		}
 		for k, v := range p.Transforms {
@@ -70,6 +83,7 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
+			secretAddPrefix(v.Options, secretBackends)
 			cfg.Transforms[v.Name] = v
 		}
 		for k, v := range p.Sinks {
@@ -77,6 +91,7 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
+			secretAddPrefix(v.Options, secretBackends)
 			cfg.Sinks[v.Name] = v
 		}
 	}
@@ -92,4 +107,21 @@ func buildAgentConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline)
 	}
 
 	return cfg, nil
+}
+
+func secretAddPrefix(options map[string]any, secretBackends map[string]string) {
+	for k, v := range options {
+		switch val := v.(type) {
+		case string:
+			if strings.HasPrefix(val, "SECRET[") && strings.HasSuffix(val, "]") {
+				tmp := strings.TrimPrefix(val, "SECRET[")
+				parts := strings.Split(tmp, ".")
+				if len(parts) == 2 {
+					if secret, ok := secretBackends[parts[0]]; ok {
+						options[k] = fmt.Sprintf("SECRET[%s.%s", secret, parts[1])
+					}
+				}
+			}
+		}
+	}
 }

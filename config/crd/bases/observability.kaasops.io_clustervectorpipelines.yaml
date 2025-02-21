@@ -52,6 +52,12 @@ spec:
           spec:
             description: VectorPipelineSpec defines the desired state of VectorPipeline
             properties:
+              secret:
+                additionalProperties:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               sinks:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true

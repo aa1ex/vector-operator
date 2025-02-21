@@ -27,6 +27,8 @@ import (
 // VectorPipelineSpec defines the desired state of VectorPipeline
 type VectorPipelineSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
+	Secret *map[string]*runtime.RawExtension `json:"secret,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Sources *runtime.RawExtension `json:"sources,omitempty"`
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Transforms *runtime.RawExtension `json:"transforms,omitempty"`
