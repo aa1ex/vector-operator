@@ -17,16 +17,22 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
+	"github.com/kaasops/vector-operator/internal/misc"
+	"github.com/kaasops/vector-operator/internal/utils/hash"
 	"github.com/kaasops/vector-operator/internal/vector/aggregator"
 	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
 	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"time"
 
 	"github.com/kaasops/vector-operator/api/v1alpha1"
@@ -53,6 +59,8 @@ type PipelineReconciler struct {
 	ClusterVectorAggregatorsEventCh          chan event.GenericEvent
 	EnableReconciliationInvalidPipelines     bool
 	ReconciliationInvalidPipelinesRetryDelay time.Duration
+	SecretsToPipelines                       *misc.SecretsToPipelines
+	SecretsToPipelinesEventCh                chan event.GenericEvent
 }
 
 var (
@@ -107,22 +115,33 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	pipelineConfig := &config.PipelineConfig{}
+	if err := config.UnmarshalJson(pipelineCR.GetSpec(), pipelineConfig); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
+	}
+
+	var relatedSecretsHash *uint32
+
 	if !r.EnableReconciliationInvalidPipelines || pipelineCR.IsValid() {
-		notChanged, err := pipeline.IsPipelineChanged(pipelineCR)
+		notChanged, err := pipeline.IsPipelineNotChanged(pipelineCR)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if notChanged {
-			log.Info("Pipeline has no changes. Finish Reconcile Pipeline")
-			return ctrl.Result{}, nil
+			relatedSecretsChanged, rsh, err := r.checkRelatedSecretsChanged(ctx, pipelineCR, pipelineConfig)
+			// TODO: handle not found secret
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			relatedSecretsHash = rsh
+			if !relatedSecretsChanged {
+				log.Info("Pipeline has no changes. Finish Reconcile Pipeline")
+				return ctrl.Result{}, nil
+			}
 		}
 	}
 
-	p := &config.PipelineConfig{}
-	if err := config.UnmarshalJson(pipelineCR.GetSpec(), p); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
-	}
-	pipelineVectorRole, err := p.VectorRole()
+	pipelineVectorRole, err := pipelineConfig.VectorRole()
 	if err != nil {
 		if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
 			log.Error(err, "Failed to set pipeline status")
@@ -146,7 +165,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					UseApiServerCache: vaCtrl.Vector.Spec.UseApiServerCache,
 					InternalMetrics:   vaCtrl.Vector.Spec.Agent.InternalMetrics,
 					ExpireMetricsSecs: vaCtrl.Vector.Spec.Agent.ExpireMetricsSecs,
-				}, pipelineCR)
+				}, r.getSecretForPipeline, pipelineCR)
 				if err != nil {
 					return fmt.Errorf("agent %s/%s build config failed: %w: %w", vector.Namespace, vector.Name, ErrBuildConfigFailed, err)
 				}
@@ -283,7 +302,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	if err = pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR); err != nil {
+	if err = pipeline.SetSuccessStatus(ctx, r.Client, pipelineCR, relatedSecretsHash); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -324,8 +343,20 @@ func (r *PipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.VectorPipeline{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 20}).
 		Watches(&v1alpha1.ClusterVectorPipeline{}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(source.Channel(r.SecretsToPipelinesEventCh, &handler.EnqueueRequestForObject{})).
 		WithEventFilter(specAndAnnotationsPredicate).
 		Complete(r)
+}
+
+func (r *PipelineReconciler) getSecretForPipeline(ctx context.Context, pipelineNamespace, pipelineName, secretName string) (*corev1.Secret, error) {
+	secret := corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{Namespace: pipelineNamespace, Name: secretName}
+	err := r.Get(ctx, secretNamespacedName, &secret)
+	if err != nil {
+		return nil, err
+	}
+	r.SecretsToPipelines.Add(secretNamespacedName, types.NamespacedName{Namespace: pipelineNamespace, Name: pipelineName})
+	return &secret, nil
 }
 
 var specAndAnnotationsPredicate = predicate.Funcs{
@@ -343,4 +374,35 @@ var specAndAnnotationsPredicate = predicate.Funcs{
 
 		return false
 	},
+}
+
+func (r *PipelineReconciler) checkRelatedSecretsChanged(
+	ctx context.Context,
+	pipelineCR pipeline.Pipeline,
+	pipelineConfig *config.PipelineConfig,
+) (bool, *uint32, error) {
+	linkedSecrets := pipelineConfig.GetRelatedKubernetesSecrets()
+	prevHash := pipelineCR.GetRelatedSecretsHash()
+	if len(linkedSecrets) == 0 && prevHash == nil {
+		return false, nil, nil
+	}
+	var buff bytes.Buffer
+	buff.Grow(len(linkedSecrets) * 50)
+	for i, secretName := range linkedSecrets {
+		secret, err := r.getSecretForPipeline(ctx, pipelineCR.GetNamespace(), pipelineCR.GetName(), secretName)
+		if err != nil {
+			return false, nil, err
+		}
+		if i != 0 && i != len(linkedSecrets)-1 {
+			buff.WriteRune(';')
+		}
+		buff.WriteString(string(secret.UID))
+		buff.WriteRune(':')
+		buff.WriteString(secret.ResourceVersion)
+	}
+	secretsHash := hash.Get(buff.Bytes())
+	if prevHash == nil || secretsHash != *prevHash {
+		return true, &secretsHash, nil
+	}
+	return false, &secretsHash, nil
 }

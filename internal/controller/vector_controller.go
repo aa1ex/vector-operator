@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"errors"
+	"github.com/kaasops/vector-operator/internal/misc"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -59,6 +61,7 @@ type VectorReconciler struct {
 	ConfigCheckTimeout time.Duration
 	DiscoveryClient    *discovery.DiscoveryClient
 	EventChan          chan event.GenericEvent
+	SecretsToPipelines *misc.SecretsToPipelines
 }
 
 //+kubebuilder:rbac:groups=observability.kaasops.io,resources=vectors,verbs=get;list;watch;create;update;patch;delete
@@ -195,7 +198,7 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 		UseApiServerCache: vaCtrl.Vector.Spec.UseApiServerCache,
 		InternalMetrics:   vaCtrl.Vector.Spec.Agent.InternalMetrics,
 		ExpireMetricsSecs: vaCtrl.Vector.Spec.Agent.ExpireMetricsSecs,
-	}, pipelines...)
+	}, r.getSecretForPipeline, pipelines...)
 	if err != nil {
 		if err := vaCtrl.SetFailedStatus(ctx, err.Error()); err != nil {
 			return ctrl.Result{}, err
@@ -248,6 +251,17 @@ func (r *VectorReconciler) createOrUpdateVector(ctx context.Context, client clie
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VectorReconciler) getSecretForPipeline(ctx context.Context, pipelineNamespace, pipelineName, secretName string) (*corev1.Secret, error) {
+	secret := corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{Namespace: pipelineNamespace, Name: secretName}
+	err := r.Get(ctx, secretNamespacedName, &secret)
+	if err != nil {
+		return nil, err
+	}
+	r.SecretsToPipelines.Add(secretNamespacedName, types.NamespacedName{Namespace: pipelineNamespace, Name: pipelineName})
+	return &secret, nil
 }
 
 func setAgentTypeMetaIfNeeded(cr *v1alpha1.Vector) {

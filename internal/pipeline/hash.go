@@ -38,18 +38,18 @@ func GetPipelineHash(pipeline Pipeline) (*uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-	hash := hash.Get(a)
-	return &hash, nil
+	pipelineHash := hash.Get(a)
+	return &pipelineHash, nil
 }
 
-// IsPipelineChanged returns true, if hash in .status.lastAppliedPipelineHash matches with spec Hash
-func IsPipelineChanged(pipeline Pipeline) (bool, error) {
-	hash, err := GetPipelineHash(pipeline)
+// IsPipelineNotChanged returns true, if hash in .status.lastAppliedPipelineHash matches with spec Hash
+func IsPipelineNotChanged(pipeline Pipeline) (bool, error) {
+	pipelineHash, err := GetPipelineHash(pipeline)
 	if err != nil {
 		return false, err
 	}
 
-	if pipeline.GetLastAppliedPipeline() != nil && *hash == *pipeline.GetLastAppliedPipeline() {
+	if pipeline.GetLastAppliedPipeline() != nil && *pipelineHash == *pipeline.GetLastAppliedPipeline() {
 		return true, nil
 	}
 

@@ -69,3 +69,11 @@ func (vp *VectorPipeline) SetRole(role *VectorPipelineRole) {
 func (vp *VectorPipeline) GetTypeMeta() metav1.TypeMeta {
 	return vp.TypeMeta
 }
+
+func (vp *VectorPipeline) GetRelatedSecretsHash() *uint32 {
+	return vp.Status.RelatedSecretsHash
+}
+
+func (vp *VectorPipeline) SetRelatedSecretsHash(h *uint32) {
+	vp.Status.RelatedSecretsHash = h
+}

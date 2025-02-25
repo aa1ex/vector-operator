@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/buildinfo"
+	"github.com/kaasops/vector-operator/internal/misc"
 	"os"
 	"time"
 
@@ -196,6 +197,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	secretsToPipelines := misc.NewSecretsToPipelines()
+
 	vectorAgentEventCh := make(chan event.GenericEvent)
 	defer close(vectorAgentEventCh)
 
@@ -206,11 +209,14 @@ func main() {
 		ConfigCheckTimeout: configCheckTimeout,
 		DiscoveryClient:    dc,
 		EventChan:          vectorAgentEventCh,
+		SecretsToPipelines: secretsToPipelines,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Vector")
 		os.Exit(1)
 	}
 
+	secretsToPipelinesEventCh := make(chan event.GenericEvent, 10)
+	defer close(secretsToPipelinesEventCh)
 	vectorAgentsPipelineEventCh := make(chan event.GenericEvent, 10)
 	defer close(vectorAgentsPipelineEventCh)
 	vectorAggregatorsPipelineEventCh := make(chan event.GenericEvent, 10)
@@ -228,6 +234,8 @@ func main() {
 		ClusterVectorAggregatorsEventCh:          clusterVectorAggregatorsPipelineEventCh,
 		EnableReconciliationInvalidPipelines:     enableReconciliationInvalidPipelines,
 		ReconciliationInvalidPipelinesRetryDelay: reconciliationRetryDelay,
+		SecretsToPipelines:                       secretsToPipelines,
+		SecretsToPipelinesEventCh:                secretsToPipelinesEventCh,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VectorPipeline")
 		os.Exit(1)
@@ -260,6 +268,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterVectorAggregator")
 		os.Exit(1)
 	}
+
+	if err = (&controller.SecretReconciler{
+		Client:                    mgr.GetClient(),
+		Scheme:                    mgr.GetScheme(),
+		SecretsToPipelines:        secretsToPipelines,
+		SecretsToPipelinesEventCh: secretsToPipelinesEventCh,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Secret")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	go reconcileWithDelay(context.Background(), vectorAgentsPipelineEventCh, vectorAgentEventCh, time.Second*10)

@@ -54,7 +54,7 @@ func newVectorConfig(p VectorConfigParams) *VectorConfig {
 		DataDir: "/vector-data-dir",
 		Api:     api,
 		PipelineConfig: PipelineConfig{
-			Secret:     make(map[string]any),
+			Secret:     make(map[string]map[string]any),
 			Sources:    make(map[string]*Source),
 			Transforms: make(map[string]*Transform),
 			Sinks:      make(map[string]*Sink),

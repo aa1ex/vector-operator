@@ -74,6 +74,9 @@ spec:
               LastAppliedPipelineHash:
                 format: int32
                 type: integer
+              RelatedSecretsHash:
+                format: int32
+                type: integer
               configCheckResult:
                 type: boolean
               reason:

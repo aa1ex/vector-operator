@@ -32,6 +32,8 @@ type Pipeline interface {
 	SetReason(*string)
 	GetLastAppliedPipeline() *uint32
 	SetLastAppliedPipeline(*uint32)
+	GetRelatedSecretsHash() *uint32
+	SetRelatedSecretsHash(*uint32)
 	GetConfigCheckResult() *bool
 	IsValid() bool
 	IsDeleted() bool
@@ -106,7 +108,7 @@ func GetValidPipelines(ctx context.Context, client client.Client, filter FilterP
 	return validPipelines, nil
 }
 
-func SetSuccessStatus(ctx context.Context, client client.Client, p Pipeline) error {
+func SetSuccessStatus(ctx context.Context, client client.Client, p Pipeline, relatedSecretHash *uint32) error {
 	p.SetConfigCheck(true)
 	p.SetReason(nil)
 	hash, err := GetPipelineHash(p)
@@ -114,12 +116,12 @@ func SetSuccessStatus(ctx context.Context, client client.Client, p Pipeline) err
 		return err
 	}
 	p.SetLastAppliedPipeline(hash)
+	p.SetRelatedSecretsHash(relatedSecretHash)
 
 	return p.UpdateStatus(ctx, client)
 }
 
 func SetFailedStatus(ctx context.Context, client client.Client, p Pipeline, reason string) error {
-
 	p.SetConfigCheck(false)
 	p.SetReason(&reason)
 	hash, err := GetPipelineHash(p)

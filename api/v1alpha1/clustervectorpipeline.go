@@ -61,3 +61,11 @@ func (vp *ClusterVectorPipeline) SetRole(role *VectorPipelineRole) {
 func (vp *ClusterVectorPipeline) GetTypeMeta() metav1.TypeMeta {
 	return vp.TypeMeta
 }
+
+func (vp *ClusterVectorPipeline) GetRelatedSecretsHash() *uint32 {
+	return vp.Status.RelatedSecretsHash
+}
+
+func (vp *ClusterVectorPipeline) SetRelatedSecretsHash(h *uint32) {
+	vp.Status.RelatedSecretsHash = h
+}

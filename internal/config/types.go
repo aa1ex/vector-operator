@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
 	corev1 "k8s.io/api/core/v1"
+	"sort"
 )
 
 type globalOptions struct {
@@ -36,10 +37,10 @@ type VectorConfig struct {
 }
 
 type PipelineConfig struct {
-	Secret     map[string]any        `yaml:"secret,omitempty"`
-	Sources    map[string]*Source    `yaml:"sources"`
-	Transforms map[string]*Transform `yaml:"transforms"`
-	Sinks      map[string]*Sink      `yaml:"sinks"`
+	Secret     map[string]map[string]any `yaml:"secret,omitempty"`
+	Sources    map[string]*Source        `yaml:"sources"`
+	Transforms map[string]*Transform     `yaml:"transforms"`
+	Sinks      map[string]*Sink          `yaml:"sinks"`
 }
 
 type ApiSpec struct {
@@ -91,13 +92,7 @@ type ServicePort struct {
 }
 
 type internalConfig struct {
-	servicePort  map[string]*ServicePort
-	mountSecrets []struct {
-		Pipeline  string
-		Namespace string
-		Name      string
-		Path      string
-	}
+	servicePort map[string]*ServicePort
 }
 
 func (c *internalConfig) addServicePort(port *ServicePort) error {
@@ -114,4 +109,22 @@ func (c *VectorConfig) GetGlobalConfigHash() *uint32 {
 	bytes, _ := json.Marshal(c.globalOptions)
 	gHash := hash.Get(bytes)
 	return &gHash
+}
+
+func (c *PipelineConfig) GetRelatedKubernetesSecrets() []string {
+	if len(c.Secret) == 0 {
+		return nil
+	}
+	kSecrets := make([]string, 0, len(c.Secret))
+	for _, s := range c.Secret {
+		if secretType, ok := s["type"]; ok && secretType == secretTypeKubernetesSecret {
+			if v, ok := s["name"]; ok {
+				if name, ok := v.(string); ok {
+					kSecrets = append(kSecrets, name)
+				}
+			}
+		}
+	}
+	sort.Strings(kSecrets)
+	return kSecrets
 }
