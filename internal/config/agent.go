@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"regexp"
 	goyaml "sigs.k8s.io/yaml"
-	"strings"
 )
 
 const (
@@ -18,9 +18,11 @@ const (
 )
 
 const (
-	secretTypeKubernetesSecret = "kubernetes-secret"
-	secretTypeFile             = "file" // TODO
-	secretTypeExec             = "exec" // TODO
+	secretTypeKubernetesSecret = "kubernetes_secret"
+	secretTypeFile             = "file"
+	secretTypeExec             = "exec"
+	secretTypeDirectory        = "directory"
+	secretTypeAWSSecretManager = "aws_secrets_manager"
 )
 
 type SecretGetter func(ctx context.Context, pipelineNamespace, pipelineName, secretName string) (*corev1.Secret, error)
@@ -50,26 +52,32 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
 		}
 		secretData := make(map[string]map[string][]byte)
+		secretBackends := make(map[string]string)
 		if len(p.Secret) > 0 {
 			for backendName, backendConf := range p.Secret {
-				if t, ok := backendConf["type"]; !ok || t != secretTypeKubernetesSecret {
-					return nil, fmt.Errorf("not supported secret type %s", t)
+				backendType := backendConf["type"]
+				switch backendType {
+				case secretTypeKubernetesSecret:
+					{
+						secretName, ok := backendConf["name"].(string)
+						if secretName == "" || !ok {
+							return nil, fmt.Errorf("invalid secret name %s", secretName)
+						}
+						secret, err := getSecretForPipeline(context.TODO(), pipeline.GetNamespace(), pipeline.GetName(), secretName)
+						if err != nil {
+							return nil, fmt.Errorf("failed to get secret %s/%s: %w", pipeline.GetNamespace(), secretName, err)
+						}
+						secretData[backendName] = secret.Data
+					}
+				case secretTypeFile, secretTypeExec, secretTypeDirectory, secretTypeAWSSecretManager:
+					prefBackendName := addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName)
+					secretBackends[backendName] = prefBackendName
+					cfg.Secret[prefBackendName] = backendConf
+				default:
+					return nil, fmt.Errorf("not supported secret type %s", backendType)
 				}
-				secretName, ok := backendConf["name"].(string)
-				if secretName == "" || !ok {
-					return nil, fmt.Errorf("invalid secret name %s", secretName)
-				}
-				secret, err := getSecretForPipeline(context.TODO(), pipeline.GetNamespace(), pipeline.GetName(), secretName)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get secret %s/%s: %w", pipeline.GetNamespace(), secretName, err)
-				}
-				secretData[backendName] = secret.Data
-				//prefBackendName := addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName)
-				//secretBackends[backendName] = prefBackendName
-				//cfg.Secret[prefBackendName] = backendConf
 			}
 		}
-		// TODO: cleanup secretsToPipelines
 		for k, v := range p.Sources {
 			// Validate source
 			if _, ok := pipeline.(*vectorv1alpha1.VectorPipeline); ok {
@@ -95,8 +103,7 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 				v.UseApiServerCache = true
 			}
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
-			//secretAddPrefix(v.Options, secretBackends)
-			fillSecrets(v.Options, secretData)
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Sources[v.Name] = v
 		}
 		for k, v := range p.Transforms {
@@ -104,8 +111,7 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
-			//secretAddPrefix(v.Options, secretBackends)
-			fillSecrets(v.Options, secretData)
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Transforms[v.Name] = v
 		}
 		for k, v := range p.Sinks {
@@ -113,8 +119,7 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
-			//secretAddPrefix(v.Options, secretBackends)
-			fillSecrets(v.Options, secretData)
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Sinks[v.Name] = v
 		}
 	}
@@ -132,44 +137,32 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 	return cfg, nil
 }
 
-//func secretAddPrefix(options map[string]any, secretBackends map[string]string) {
-//	for k, v := range options {
-//		switch val := v.(type) {
-//		case string:
-//			if strings.HasPrefix(val, "SECRET[") && strings.HasSuffix(val, "]") {
-//				tmp := strings.TrimPrefix(val, "SECRET[")
-//				parts := strings.Split(tmp, ".")
-//				if len(parts) == 2 {
-//					if secret, ok := secretBackends[parts[0]]; ok {
-//						options[k] = fmt.Sprintf("SECRET[%s.%s", secret, parts[1])
-//					}
-//				}
-//			}
-//		}
-//	}
-//}
+var secretRegex = regexp.MustCompile(`^SECRET\[(\w+)\.(\w+)]$`)
 
-func fillSecrets(options map[string]any, secretData map[string]map[string][]byte) {
-	if len(secretData) == 0 {
-		return
-	}
+func prepareSecrets(options map[string]any, secretBackends map[string]string, secretData map[string]map[string][]byte) {
 	for k, v := range options {
 		switch val := v.(type) {
 		case string:
-			if strings.HasPrefix(val, "SECRET[") && strings.HasSuffix(val, "]") {
-				tmp := strings.TrimPrefix(val, "SECRET[")
-				tmp = strings.TrimSuffix(tmp, "]")
-				parts := strings.Split(tmp, ".")
-				if len(parts) == 2 {
-					if secretBackend, ok := secretData[parts[0]]; ok {
-						if secretValue, ok := secretBackend[parts[1]]; ok {
+			{
+				matches := secretRegex.FindStringSubmatch(val)
+				if matches == nil {
+					continue
+				}
+				backendName := matches[1]
+				varName := matches[2]
+				if newBackendName, ok := secretBackends[backendName]; ok { // file, exec, etc
+					options[k] = fmt.Sprintf("SECRET[%s.%s]", newBackendName, varName)
+				} else {
+					if secretBackend, ok := secretData[backendName]; ok { // kubernetes_secret
+						if secretValue, ok := secretBackend[varName]; ok {
 							options[k] = string(secretValue)
 						}
 					}
 				}
 			}
+
 		case map[string]any:
-			fillSecrets(val, secretData)
+			prepareSecrets(val, secretBackends, secretData)
 		}
 	}
 }
