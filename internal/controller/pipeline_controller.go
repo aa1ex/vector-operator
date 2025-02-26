@@ -28,11 +28,13 @@ import (
 	"github.com/kaasops/vector-operator/internal/vector/vectoragent"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
+	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sort"
 	"time"
 
 	"github.com/kaasops/vector-operator/api/v1alpha1"
@@ -120,24 +122,25 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipelineCR.GetName(), err)
 	}
 
-	var relatedSecretsHash *uint32
+	relatedSecretsChanged, relatedSecretsHash, err := r.checkRelatedSecretsChanged(ctx, pipelineCR, pipelineConfig)
+	if err != nil {
+		if api_errors.IsNotFound(err) {
+			if err := pipeline.SetFailedStatus(ctx, r.Client, pipelineCR, err.Error()); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
 
 	if !r.EnableReconciliationInvalidPipelines || pipelineCR.IsValid() {
 		notChanged, err := pipeline.IsPipelineNotChanged(pipelineCR)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if notChanged {
-			relatedSecretsChanged, rsh, err := r.checkRelatedSecretsChanged(ctx, pipelineCR, pipelineConfig)
-			// TODO: handle not found secret
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			relatedSecretsHash = rsh
-			if !relatedSecretsChanged {
-				log.Info("Pipeline has no changes. Finish Reconcile Pipeline")
-				return ctrl.Result{}, nil
-			}
+		if notChanged && !relatedSecretsChanged {
+			log.Info("Pipeline has no changes. Finish Reconcile Pipeline")
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -386,6 +389,9 @@ func (r *PipelineReconciler) checkRelatedSecretsChanged(
 	if len(linkedSecrets) == 0 && prevHash == nil {
 		return false, nil, nil
 	}
+	sort.Strings(linkedSecrets)
+	pipelineNN := types.NamespacedName{Namespace: pipelineCR.GetNamespace(), Name: pipelineCR.GetName()}
+	secretsSet := r.SecretsToPipelines.GetPipelineSecretsSet(pipelineNN)
 	var buff bytes.Buffer
 	buff.Grow(len(linkedSecrets) * 50)
 	for i, secretName := range linkedSecrets {
@@ -393,14 +399,18 @@ func (r *PipelineReconciler) checkRelatedSecretsChanged(
 		if err != nil {
 			return false, nil, err
 		}
-		if i != 0 && i != len(linkedSecrets)-1 {
+		if i != 0 {
 			buff.WriteRune(';')
 		}
 		buff.WriteString(string(secret.UID))
 		buff.WriteRune(':')
 		buff.WriteString(secret.ResourceVersion)
+		delete(secretsSet, types.NamespacedName{Namespace: pipelineCR.GetNamespace(), Name: secretName})
 	}
 	secretsHash := hash.Get(buff.Bytes())
+	for secretNN := range secretsSet {
+		r.SecretsToPipelines.Delete(secretNN, pipelineNN)
+	}
 	if prevHash == nil || secretsHash != *prevHash {
 		return true, &secretsHash, nil
 	}

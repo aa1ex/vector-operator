@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
 	corev1 "k8s.io/api/core/v1"
-	"sort"
 )
 
 type globalOptions struct {
@@ -125,6 +124,5 @@ func (c *PipelineConfig) GetRelatedKubernetesSecrets() []string {
 			}
 		}
 	}
-	sort.Strings(kSecrets)
 	return kSecrets
 }

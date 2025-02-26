@@ -41,7 +41,7 @@ func BuildAgentConfig(p VectorConfigParams, f SecretGetter, pipelines ...pipelin
 	return cfg, jsonBytes, nil
 }
 
-func buildAgentConfig(params VectorConfigParams, getSecret SecretGetter, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
+func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGetter, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
 	cfg := newVectorConfig(params)
 
 	for _, pipeline := range pipelines {
@@ -59,7 +59,7 @@ func buildAgentConfig(params VectorConfigParams, getSecret SecretGetter, pipelin
 				if secretName == "" || !ok {
 					return nil, fmt.Errorf("invalid secret name %s", secretName)
 				}
-				secret, err := getSecret(context.TODO(), pipeline.GetNamespace(), pipeline.GetName(), secretName)
+				secret, err := getSecretForPipeline(context.TODO(), pipeline.GetNamespace(), pipeline.GetName(), secretName)
 				if err != nil {
 					return nil, fmt.Errorf("failed to get secret %s/%s: %w", pipeline.GetNamespace(), secretName, err)
 				}
