@@ -207,7 +207,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 						PlaygroundEnabled: vaCtrl.Spec.Api.Playground,
 						InternalMetrics:   vaCtrl.Spec.InternalMetrics,
 						ExpireMetricsSecs: vaCtrl.Spec.ExpireMetricsSecs,
-					}, pipelineCR)
+					}, r.getSecretForPipeline, pipelineCR)
 					if err != nil {
 						return fmt.Errorf("aggregator %s/%s build config failed: %w: %w", vector.Namespace, vector.Name, ErrBuildConfigFailed, err)
 					}
@@ -253,7 +253,7 @@ func (r *PipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 						PlaygroundEnabled: vaCtrl.Spec.Api.Playground,
 						InternalMetrics:   vaCtrl.Spec.InternalMetrics,
 						ExpireMetricsSecs: vaCtrl.Spec.ExpireMetricsSecs,
-					}, pipelineCR)
+					}, r.getSecretForPipeline, pipelineCR)
 					if err != nil {
 						return fmt.Errorf("cluster aggregator %s/%s build config failed: %w: %w", vector.Namespace, vector.Name, ErrBuildConfigFailed, err)
 					}

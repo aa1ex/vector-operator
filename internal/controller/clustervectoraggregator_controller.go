@@ -21,6 +21,7 @@ import (
 	"errors"
 	"github.com/kaasops/vector-operator/internal/config"
 	"github.com/kaasops/vector-operator/internal/config/configcheck"
+	"github.com/kaasops/vector-operator/internal/misc"
 	"github.com/kaasops/vector-operator/internal/pipeline"
 	"github.com/kaasops/vector-operator/internal/utils/hash"
 	"github.com/kaasops/vector-operator/internal/utils/k8s"
@@ -31,6 +32,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	api_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,6 +53,7 @@ type ClusterVectorAggregatorReconciler struct {
 	Clientset          *kubernetes.Clientset
 	ConfigCheckTimeout time.Duration
 	EventChan          chan event.GenericEvent
+	SecretsToPipelines *misc.SecretsToPipelines
 }
 
 // +kubebuilder:rbac:groups=observability.kaasops.io,resources=clustervectoraggregators,verbs=get;list;watch;create;update;patch;delete
@@ -120,7 +123,7 @@ func (r *ClusterVectorAggregatorReconciler) createOrUpdateVectorAggregator(ctx c
 		PlaygroundEnabled: vaCtrl.Spec.Api.Playground,
 		InternalMetrics:   vaCtrl.Spec.InternalMetrics,
 		ExpireMetricsSecs: vaCtrl.Spec.ExpireMetricsSecs,
-	}, pipelines...)
+	}, r.getSecretForPipeline, pipelines...)
 	if err != nil {
 		if err := vaCtrl.SetFailedStatus(ctx, err.Error()); err != nil {
 			return ctrl.Result{}, err
@@ -200,6 +203,17 @@ func (r *ClusterVectorAggregatorReconciler) SetupWithManager(mgr ctrl.Manager) e
 		return err
 	}
 	return nil
+}
+
+func (r *ClusterVectorAggregatorReconciler) getSecretForPipeline(ctx context.Context, pipelineNamespace, pipelineName, secretName string) (*corev1.Secret, error) {
+	secret := corev1.Secret{}
+	secretNamespacedName := types.NamespacedName{Namespace: pipelineNamespace, Name: secretName}
+	err := r.Get(ctx, secretNamespacedName, &secret)
+	if err != nil {
+		return nil, err
+	}
+	r.SecretsToPipelines.Add(secretNamespacedName, types.NamespacedName{Namespace: pipelineNamespace, Name: pipelineName})
+	return &secret, nil
 }
 
 func listClusterVectorAggregators(ctx context.Context, client client.Client) (vectors []*v1alpha1.ClusterVectorAggregator, err error) {

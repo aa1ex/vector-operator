@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/kaasops/vector-operator/internal/common"
@@ -12,7 +13,7 @@ import (
 	"strings"
 )
 
-func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
+func BuildAggregatorConfig(params VectorConfigParams, getSecretForPipeline SecretGetter, pipelines ...pipeline.Pipeline) (*VectorConfig, error) {
 	cfg := newVectorConfig(params)
 
 	cfg.Sources = make(map[string]*Source)
@@ -28,6 +29,33 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 		p := &PipelineConfig{}
 		if err := UnmarshalJson(pipeline.GetSpec(), p); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal pipeline %s: %w", pipeline.GetName(), err)
+		}
+		secretData := make(map[string]map[string][]byte)
+		secretBackends := make(map[string]string)
+		if len(p.Secret) > 0 {
+			for backendName, backendConf := range p.Secret {
+				backendType := backendConf["type"]
+				switch backendType {
+				case secretTypeKubernetesSecret:
+					{
+						secretName, ok := backendConf["name"].(string)
+						if secretName == "" || !ok {
+							return nil, fmt.Errorf("invalid secret name %s", secretName)
+						}
+						secret, err := getSecretForPipeline(context.TODO(), pipeline.GetNamespace(), pipeline.GetName(), secretName)
+						if err != nil {
+							return nil, fmt.Errorf("failed to get secret %s/%s: %w", pipeline.GetNamespace(), secretName, err)
+						}
+						secretData[backendName] = secret.Data
+					}
+				case secretTypeFile, secretTypeExec, secretTypeDirectory, secretTypeAWSSecretManager:
+					prefBackendName := addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName)
+					secretBackends[backendName] = prefBackendName
+					cfg.Secret[prefBackendName] = backendConf
+				default:
+					return nil, fmt.Errorf("not supported secret type %s", backendType)
+				}
+			}
 		}
 		for k, v := range p.Sources {
 			settings := v
@@ -88,6 +116,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 			}
 
 			v.Name = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), k)
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Sources[v.Name] = settings
 		}
 		for k, v := range p.Transforms {
@@ -95,6 +124,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Transforms[v.Name] = v
 		}
 		for k, v := range p.Sinks {
@@ -102,6 +132,7 @@ func BuildAggregatorConfig(params VectorConfigParams, pipelines ...pipeline.Pipe
 			for i, inputName := range v.Inputs {
 				v.Inputs[i] = addPrefix(pipeline.GetNamespace(), pipeline.GetName(), inputName)
 			}
+			prepareSecrets(v.Options, secretBackends, secretData)
 			cfg.Sinks[v.Name] = v
 		}
 	}

@@ -140,6 +140,9 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 var secretRegex = regexp.MustCompile(`^SECRET\[(\w+)\.(\w+)]$`)
 
 func prepareSecrets(options map[string]any, secretBackends map[string]string, secretData map[string]map[string][]byte) {
+	if len(secretBackends) == 0 && len(secretData) == 0 {
+		return
+	}
 	for k, v := range options {
 		switch val := v.(type) {
 		case string:
