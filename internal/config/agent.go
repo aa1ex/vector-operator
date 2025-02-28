@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"regexp"
 	goyaml "sigs.k8s.io/yaml"
+	"strings"
 )
 
 const (
@@ -70,7 +71,7 @@ func buildAgentConfig(params VectorConfigParams, getSecretForPipeline SecretGett
 						secretData[backendName] = secret.Data
 					}
 				case secretTypeFile, secretTypeExec, secretTypeDirectory, secretTypeAWSSecretManager:
-					prefBackendName := addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName)
+					prefBackendName := strings.ReplaceAll(addPrefix(pipeline.GetNamespace(), pipeline.GetName(), backendName), "-", "_")
 					secretBackends[backendName] = prefBackendName
 					cfg.Secret[prefBackendName] = backendConf
 				default:

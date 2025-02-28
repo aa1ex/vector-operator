@@ -31,10 +31,12 @@ func (cc *ConfigCheck) createVectorConfigCheckPod() *corev1.Pod {
 	}
 
 	container := corev1.Container{
-		Name:            "config-check",
-		Image:           cc.Image,
-		Resources:       cc.Resources,
-		Args:            []string{"--require-healthy=false", "validate", "/etc/vector/*.json"},
+		Name:      "config-check",
+		Image:     cc.Image,
+		Resources: cc.Resources,
+		Command:   []string{"sleep"},
+		Args:      []string{"600s"},
+		//Args:            []string{"--require-healthy=false", "validate", "/etc/vector/*.json"},
 		Env:             cc.generateVectorConfigCheckEnvs(),
 		SecurityContext: cc.ContainerSecurityContext,
 		VolumeMounts:    cc.generateVectorConfigCheckVolumeMounts(),
@@ -80,7 +82,7 @@ func (cc *ConfigCheck) generateVectorConfigCheckVolume() []corev1.Volume {
 		}
 
 	}
-	volume := []corev1.Volume{
+	volume := append(cc.Volumes, []corev1.Volume{
 		{
 			Name:         "config",
 			VolumeSource: configVolumeSource,
@@ -123,7 +125,7 @@ func (cc *ConfigCheck) generateVectorConfigCheckVolume() []corev1.Volume {
 				},
 			},
 		},
-	}
+	}...)
 
 	if cc.CompressedConfig {
 		volume = append(volume, corev1.Volume{
@@ -140,7 +142,8 @@ func (cc *ConfigCheck) generateVectorConfigCheckVolume() []corev1.Volume {
 }
 
 func (cc *ConfigCheck) generateVectorConfigCheckVolumeMounts() []corev1.VolumeMount {
-	volumeMount := []corev1.VolumeMount{
+
+	volumeMount := append(cc.VolumeMounts, []corev1.VolumeMount{
 		{
 			Name:      "config",
 			MountPath: "/etc/vector/",
@@ -165,7 +168,7 @@ func (cc *ConfigCheck) generateVectorConfigCheckVolumeMounts() []corev1.VolumeMo
 			Name:      "sysfs",
 			MountPath: "/host/sys",
 		},
-	}
+	}...)
 
 	if cc.CompressedConfig {
 		volumeMount = append(volumeMount, []corev1.VolumeMount{

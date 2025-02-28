@@ -62,6 +62,8 @@ type ConfigCheck struct {
 	ConfigReloaderResources  corev1.ResourceRequirements
 	ConfigCheckTimeout       time.Duration
 	Annotations              map[string]string
+	VolumeMounts             []corev1.VolumeMount
+	Volumes                  []corev1.Volume
 }
 
 func New(
@@ -111,6 +113,8 @@ func New(
 		ConfigCheckTimeout:       timeout,
 		Annotations:              vc.ConfigCheck.Annotations,
 		Initiator:                initiator,
+		VolumeMounts:             vc.VolumeMounts,
+		Volumes:                  vc.Volumes,
 	}
 }
 
